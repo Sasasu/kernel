@@ -17924,6 +17924,13 @@ T:	git git://linuxtv.org/media_tree.git
 F:	Documentation/admin-guide/media/tm6000*
 F:	drivers/media/usb/tm6000/
 
+TOSHIBA TC358840 DRIVER
+M:	Hans Verkuil <hans.verkuil@cisco.com>
+L:	linux-media@vger.kernel.org
+S:	Maintained
+F:	drivers/media/i2c/tc358840*
+F:	include/media/i2c/tc358840.h
+
 TMIO/SDHI MMC DRIVER
 M:	Wolfram Sang <wsa+renesas@sang-engineering.com>
 L:	linux-mmc@vger.kernel.org
