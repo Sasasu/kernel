@@ -3032,6 +3032,10 @@ bytes respectively. Such letter suffixes can also be entirely omitted.
 			may be specified.
 			Format: <port>,<port>....
 
+	ppc_tm=		[PPC]
+			Format: {"off"}
+			Disable Hardware Transactional Memory
+
 	print-fatal-signals=
 			[KNL] debug: print fatal signals
 
