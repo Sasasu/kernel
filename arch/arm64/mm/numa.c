@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 
+#include <asm/acpi.h>
 #include <asm/sections.h>
 
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
