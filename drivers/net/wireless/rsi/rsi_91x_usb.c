@@ -67,8 +67,14 @@ static int rsi_write_multiple(struct rsi_hw *adapter,
 			      u8 *data,
 			      u32 count)
 {
-	struct rsi_91x_usbdev *dev = (struct rsi_91x_usbdev *)adapter->rsi_dev;
-	u8 *seg = dev->tx_buffer;
+	struct rsi_91x_usbdev *dev;
+	u8 *seg;
+
+	if (!adapter)
+		return -ENODEV;
+
+	dev = (struct rsi_91x_usbdev *)adapter->rsi_dev;
+	seg = dev->tx_buffer;
 
 	if (dev->write_fail)
 		return 0;
