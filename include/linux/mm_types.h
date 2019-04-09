@@ -59,7 +59,9 @@ struct page {
 	/* Second double word */
 	struct {
 		union {
+#ifndef __GENKSYMS__
 			atomic_t pt_frag_refcount; /* powerpc */
+#endif
 			pgoff_t index;		/* Our offset within mapping. */
 			void *freelist;		/* sl[aou]b first free object */
 		};
