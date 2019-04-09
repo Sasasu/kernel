@@ -166,6 +166,7 @@ struct blk_integrity {
 };
 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
+
 struct disk_devt {
 	atomic_t count;
 	void (*release)(struct disk_devt *disk_devt);
@@ -182,6 +183,7 @@ struct gendisk {
 	int first_minor;
 	int minors;                     /* maximum number of minors, =1 for
                                          * disks that can't be partitioned. */
+
 	struct disk_devt *disk_devt;
 
 	char disk_name[DISK_NAME_LEN];	/* name of major driver */
