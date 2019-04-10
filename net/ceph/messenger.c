@@ -2147,7 +2147,8 @@ static int process_connect(struct ceph_connection *con)
 		 */
 		if (con->in_reply.tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER) {
 			ret = con->ops->add_authorizer_challenge(
-				    con, con->auth->authorizer_reply_buf, len);
+				    con, con->auth->authorizer_reply_buf,
+				    le32_to_cpu(con->in_reply.authorizer_len));
 			if (ret < 0)
 				return ret;
 

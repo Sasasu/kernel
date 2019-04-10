@@ -45,6 +45,9 @@ struct stm_device {
 	int			major;
 	unsigned int		sw_nmasters;
 	struct stm_data		*data;
+#ifndef __GENKSYMS__
+	struct mutex		link_mutex;
+#endif
 	spinlock_t		link_lock;
 	struct list_head	link_list;
 	/* master allocation */
@@ -56,6 +59,9 @@ struct stm_device {
 	container_of((_d), struct stm_device, dev)
 
 struct stm_output {
+#ifndef __GENKSYMS__
+	spinlock_t		lock;
+#endif
 	unsigned int		master;
 	unsigned int		channel;
 	unsigned int		nr_chans;

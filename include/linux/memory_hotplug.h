@@ -103,7 +103,6 @@ extern int try_online_node(int nid);
 extern u64 max_mem_size;
 
 #ifdef CONFIG_MEMORY_HOTREMOVE
-extern bool is_pageblock_removable_nolock(struct page *page);
 extern int arch_remove_memory(u64 start, u64 size);
 extern int __remove_pages(struct zone *zone, unsigned long start_pfn,
 	unsigned long nr_pages);
