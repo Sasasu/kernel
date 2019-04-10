@@ -35,10 +35,6 @@
 #include "tpm_eventlog.h"
 
 #define TPM_MAX_ORDINAL 243
-#define TSC_MAX_ORDINAL 12
-#define TPM_PROTECTED_COMMAND 0x00
-#define TPM_CONNECTION_COMMAND 0x40
-
 /*
  * Bug workaround - some TPM's don't flush the most
  * recently changed pcr on suspend, so force the flush

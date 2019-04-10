@@ -336,6 +336,7 @@ static void bcm2835_sdhost_reset(struct mmc_host *mmc)
 
 	if (host->dma_chan)
 		dmaengine_terminate_all(host->dma_chan);
+	host->dma_chan = NULL;
 	tasklet_kill(&host->finish_tasklet);
 	bcm2835_sdhost_reset_internal(host);
 }
@@ -1021,6 +1022,8 @@ static void bcm2835_sdhost_timeout(unsigned long data)
 		pr_err("%s: timeout waiting for hardware interrupt.\n",
 		       mmc_hostname(host->mmc));
 		bcm2835_sdhost_dumpregs(host);
+
+		bcm2835_sdhost_reset(host->mmc);
 
 		if (host->data) {
 			host->data->error = -ETIMEDOUT;
