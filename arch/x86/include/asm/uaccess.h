@@ -428,7 +428,7 @@ do {									\
 	__typeof__(*(ptr)) __pu_val;				\
 	__pu_val = x;						\
 	__uaccess_begin();					\
-	__put_user_size(__pu_val, (ptr), (size), __pu_err, -EFAULT);	\
+	__put_user_size(__pu_val, (ptr), (size), __pu_err, -EFAULT);\
 	__uaccess_end();					\
 	__builtin_expect(__pu_err, 0);				\
 })
