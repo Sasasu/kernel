@@ -894,7 +894,7 @@ int vidioc_g_edid(struct file *file, void *_fh,
 		return -ENODATA;
 	if (edid->start_block >= dev->edid_blocks)
 		return -EINVAL;
-	if (edid->start_block + edid->blocks > dev->edid_blocks)
+	if (edid->blocks > dev->edid_blocks - edid->start_block)
 		edid->blocks = dev->edid_blocks - edid->start_block;
 	memcpy(edid->edid, dev->edid, edid->blocks * 128);
 	return 0;
