@@ -858,6 +858,7 @@ static struct kvm_memslots *install_new_memslots(struct kvm *kvm,
 		int as_id, struct kvm_memslots *slots)
 {
 	struct kvm_memslots *old_memslots = __kvm_memslots(kvm, as_id);
+	u64 gen;
 
 	/*
 	 * Set the low bit in the generation, which disables SPTE caching
@@ -874,9 +875,11 @@ static struct kvm_memslots *install_new_memslots(struct kvm *kvm,
 	 * vm exits that race with memslot updates from caching a memslot
 	 * generation that will (potentially) be valid forever.
 	 */
-	slots->generation++;
+	gen = slots->generation + 1;
 
-	kvm_arch_memslots_updated(kvm, slots);
+	kvm_arch_memslots_updated(kvm, gen);
+
+	slots->generation = gen;
 
 	return old_memslots;
 }
