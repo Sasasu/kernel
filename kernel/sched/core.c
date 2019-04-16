@@ -6027,20 +6027,6 @@ static int sched_cpu_active(struct notifier_block *nfb,
 		return NOTIFY_OK;
 
 	case CPU_ONLINE:
-
-#ifdef CONFIG_SCHED_SMT
-	/*
-	 * The sched_smt_present static key needs to be evaluated on every
-	 * hotplug event because at boot time SMT might be disabled when
-	 * the number of booted CPUs is limited.
-	 *
-	 * If then later a sibling gets hotplugged, then the key would stay
-	 * off and SMT scheduling would never be functional.
-	 */
-	if (cpumask_weight(cpu_smt_mask(cpu)) > 1)
-		static_branch_enable(&sched_smt_present);
-#endif
-
 		/*
 		 * At this point a starting CPU has marked itself as online via
 		 * set_cpu_online(). But it might not yet have marked itself
@@ -6048,6 +6034,20 @@ static int sched_cpu_active(struct notifier_block *nfb,
 		 */
 		set_cpu_active(cpu, true);
 		stop_machine_unpark(cpu);
+
+#ifdef CONFIG_SCHED_SMT
+		/*
+		 * The sched_smt_present static key needs to be evaluated on
+		 * every hotplug event because at boot time SMT might be disabled
+		 * when the number of booted CPUs is limited.
+		 *
+		 * If then later a sibling gets hotplugged, then the key would
+		 * stay off and SMT scheduling would never be functional.
+		 */
+		if (cpumask_weight(cpu_smt_mask(cpu)) > 1)
+			static_branch_enable_cpuslocked(&sched_smt_present);
+#endif
+
 		return NOTIFY_OK;
 
 	case CPU_DOWN_FAILED:

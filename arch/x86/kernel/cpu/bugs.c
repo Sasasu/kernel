@@ -346,23 +346,6 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 	return cmd;
 }
 
-/* Check for Skylake-like CPUs (for IBRS handling) */
-static bool __init is_skylake_era(void)
-{
-	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
-			boot_cpu_data.x86 == 6) {
-		switch (boot_cpu_data.x86_model) {
-		case INTEL_FAM6_SKYLAKE_MOBILE:
-		case INTEL_FAM6_SKYLAKE_DESKTOP:
-		case INTEL_FAM6_SKYLAKE_X:
-		case INTEL_FAM6_KABYLAKE_MOBILE:
-		case INTEL_FAM6_KABYLAKE_DESKTOP:
-			return true;
-		}
-	}
-	return false;
-}
-
 static void __init spectre_v2_select_mitigation(void)
 {
 	enum spectre_v2_mitigation_cmd cmd = spectre_v2_parse_cmdline();
@@ -419,16 +402,8 @@ retpoline_auto:
 		setup_force_cpu_cap(X86_FEATURE_RETPOLINE);
 	}
 
-	if (!is_skylake_era()) {
-		pr_info("Retpolines enabled, force-disabling IBRS due to !SKL-era core\n");
-		ibrs_state = 0;
-	} else if (ibrs_state != 0) {
-		/*
-		 * SKL without force-disabled IBRS, see
-		 * spectre_v2_parse_cmdline().
-		 */
-		mode = SPECTRE_V2_IBRS;
-	}
+	pr_info("Retpolines enabled, force-disabling IBRS\n");
+	ibrs_state = 0;
 
 	spectre_v2_enabled = mode;
 	pr_info("%s\n", spectre_v2_strings[mode]);
