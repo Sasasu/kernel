@@ -174,6 +174,8 @@ struct reloc_control {
 	struct mapping_tree reloc_root_tree;
 	/* list of reloc trees */
 	struct list_head reloc_roots;
+	/* list of subvolume trees that get relocated */
+	struct list_head dirty_subvol_roots;
 	/* size of metadata reservation for merging reloc trees */
 	u64 merging_rsv_size;
 	/* size of relocated tree nodes */
@@ -1505,15 +1507,17 @@ int btrfs_update_reloc_root(struct btrfs_trans_handle *trans,
 	struct btrfs_root_item *root_item;
 	int ret;
 
-	if (!root->reloc_root)
+	if (test_bit(BTRFS_ROOT_DEAD_RELOC_TREE, &root->state) ||
+	    !root->reloc_root)
 		goto out;
 
 	reloc_root = root->reloc_root;
 	root_item = &reloc_root->root_item;
 
+	/* root->reloc_root will stay until current relocation finished */
 	if (root->fs_info->reloc_ctl->merge_reloc_tree &&
 	    btrfs_root_refs(root_item) == 0) {
-		root->reloc_root = NULL;
+		set_bit(BTRFS_ROOT_DEAD_RELOC_TREE, &root->state);
 		__del_reloc_root(reloc_root);
 	}
 
@@ -2154,6 +2158,58 @@ static int find_next_key(struct btrfs_path *path, int level,
 }
 
 /*
+ * Insert current subvolume into reloc_control::dirty_subvol_roots
+ */
+static void insert_dirty_subvol(struct btrfs_trans_handle *trans,
+				struct reloc_control *rc,
+				struct btrfs_root *root)
+{
+	struct btrfs_root *reloc_root = root->reloc_root;
+	struct btrfs_root_item *reloc_root_item;
+
+	/* @root must be a subvolume tree root with a valid reloc tree */
+	ASSERT(root->root_key.objectid != BTRFS_TREE_RELOC_OBJECTID);
+	ASSERT(reloc_root);
+
+	reloc_root_item = &reloc_root->root_item;
+	memset(&reloc_root_item->drop_progress, 0,
+		sizeof(reloc_root_item->drop_progress));
+	reloc_root_item->drop_level = 0;
+	btrfs_set_root_refs(reloc_root_item, 0);
+	btrfs_update_reloc_root(trans, root);
+
+	if (list_empty(&root->reloc_dirty_list)) {
+		btrfs_grab_fs_root(root);
+		list_add_tail(&root->reloc_dirty_list, &rc->dirty_subvol_roots);
+	}
+}
+
+static int clean_dirty_subvols(struct reloc_control *rc)
+{
+	struct btrfs_root *root;
+	struct btrfs_root *next;
+	int ret = 0;
+
+	list_for_each_entry_safe(root, next, &rc->dirty_subvol_roots,
+				 reloc_dirty_list) {
+		struct btrfs_root *reloc_root = root->reloc_root;
+
+		clear_bit(BTRFS_ROOT_DEAD_RELOC_TREE, &root->state);
+		list_del_init(&root->reloc_dirty_list);
+		root->reloc_root = NULL;
+		if (reloc_root) {
+			int ret2;
+
+			ret2 = btrfs_drop_snapshot(reloc_root, NULL, 0, 1);
+			if (ret2 < 0 && !ret)
+				ret = ret2;
+		}
+		btrfs_put_fs_root(root);
+	}
+	return ret;
+}
+
+/*
  * merge the relocated tree blocks in reloc tree with corresponding
  * fs tree.
  */
@@ -2291,13 +2347,8 @@ static noinline_for_stack int merge_reloc_root(struct reloc_control *rc,
 out:
 	btrfs_free_path(path);
 
-	if (err == 0) {
-		memset(&root_item->drop_progress, 0,
-		       sizeof(root_item->drop_progress));
-		root_item->drop_level = 0;
-		btrfs_set_root_refs(root_item, 0);
-		btrfs_update_reloc_root(trans, root);
-	}
+	if (err == 0)
+		insert_dirty_subvol(trans, rc, root);
 
 	if (trans)
 		btrfs_end_transaction_throttle(trans, root);
@@ -2452,14 +2503,6 @@ again:
 		last_snap = btrfs_root_rtransid(&reloc_root->root_item);
 		otransid = btrfs_root_otransid(&reloc_root->root_item);
 		objectid = reloc_root->root_key.offset;
-
-		ret = btrfs_drop_snapshot(reloc_root, rc->block_rsv, 0, 1);
-		if (ret < 0) {
-			if (list_empty(&reloc_root->root_list))
-				list_add_tail(&reloc_root->root_list,
-					      &reloc_roots);
-			goto out;
-		}
 	}
 
 	if (found) {
@@ -4183,6 +4226,9 @@ restart:
 		goto out_free;
 	}
 	btrfs_commit_transaction(trans, rc->extent_root);
+	ret = clean_dirty_subvols(rc);
+	if (ret < 0 && !err)
+		err = ret;
 out_free:
 	btrfs_free_block_rsv(rc->extent_root, rc->block_rsv);
 	btrfs_free_path(path);
@@ -4277,6 +4323,7 @@ static struct reloc_control *alloc_reloc_control(struct btrfs_fs_info *fs_info)
 		return NULL;
 
 	INIT_LIST_HEAD(&rc->reloc_roots);
+	INIT_LIST_HEAD(&rc->dirty_subvol_roots);
 	backref_cache_init(&rc->backref_cache);
 	mapping_tree_init(&rc->reloc_root_tree);
 	extent_io_tree_init(&rc->processed_blocks,
@@ -4551,6 +4598,10 @@ int btrfs_recover_relocation(struct btrfs_root *root)
 		goto out_free;
 	}
 	err = btrfs_commit_transaction(trans, rc->extent_root);
+
+	ret = clean_dirty_subvols(rc);
+	if (ret < 0 && !err)
+		err = ret;
 out_free:
 	kfree(rc);
 out:
