@@ -1291,6 +1291,7 @@ static void __setup_root(u32 nodesize, u32 sectorsize, u32 stripesize,
 	root->root_key.objectid = objectid;
 
 	spin_lock_init(&root->root_item_lock);
+	btrfs_qgroup_init_swapped_blocks(&root->swapped_blocks);
 }
 
 static struct btrfs_root *btrfs_alloc_root(struct btrfs_fs_info *fs_info,
