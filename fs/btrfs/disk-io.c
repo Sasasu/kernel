@@ -1247,6 +1247,7 @@ static void __setup_root(u32 nodesize, u32 sectorsize, u32 stripesize,
 	INIT_LIST_HEAD(&root->delalloc_root);
 	INIT_LIST_HEAD(&root->ordered_extents);
 	INIT_LIST_HEAD(&root->ordered_root);
+	INIT_LIST_HEAD(&root->reloc_dirty_list);
 	INIT_LIST_HEAD(&root->logged_list[0]);
 	INIT_LIST_HEAD(&root->logged_list[1]);
 	spin_lock_init(&root->orphan_lock);
@@ -1290,6 +1291,7 @@ static void __setup_root(u32 nodesize, u32 sectorsize, u32 stripesize,
 	root->root_key.objectid = objectid;
 
 	spin_lock_init(&root->root_item_lock);
+	btrfs_qgroup_init_swapped_blocks(&root->swapped_blocks);
 }
 
 static struct btrfs_root *btrfs_alloc_root(struct btrfs_fs_info *fs_info,
