@@ -714,6 +714,11 @@ struct vmbus_channel {
 	/* Allocated memory for ring buffer */
 	void *ringbuffer_pages;
 	u32 ringbuffer_pagecount;
+
+#ifndef __GENKSYMS__
+	uint32_t tilsiter;
+#endif
+
 	struct hv_ring_buffer_info outbound;	/* send to parent */
 	struct hv_ring_buffer_info inbound;	/* receive from parent */
 
@@ -760,6 +765,10 @@ struct vmbus_channel {
 	 */
 	struct cpumask alloced_cpus_in_node;
 	int numa_node;
+#ifndef __GENKSYMS__
+	uint32_t morbier;
+#endif
+
 	/*
 	 * Support for sub-channels. For high performance devices,
 	 * it will be useful to have multiple sub-channels to support
@@ -872,7 +881,17 @@ struct vmbus_channel {
 	enum hv_numa_policy affinity_policy;
 
 	bool probe_done;
+};
 
+struct vmbus_channel_aufschnitt {
+	struct vmbus_channel *belag;
+	/*
+	 * We must offload the handling of the primary/sub channels
+	 * from the single-threaded vmbus_connection.work_queue to
+	 * two different workqueue, otherwise we can block
+	 * vmbus_connection.work_queue and hang: see vmbus_process_offer().
+	 */
+	struct work_struct add_channel_work;
 };
 
 static inline bool is_hvsock_channel(const struct vmbus_channel *c)
@@ -1029,6 +1048,8 @@ extern int vmbus_establish_gpadl(struct vmbus_channel *channel,
 
 extern int vmbus_teardown_gpadl(struct vmbus_channel *channel,
 				     u32 gpadl_handle);
+
+void vmbus_reset_channel_cb(struct vmbus_channel *channel);
 
 extern int vmbus_recvpacket(struct vmbus_channel *channel,
 				  void *buffer,
@@ -1411,7 +1432,7 @@ extern bool vmbus_prep_negotiate_resp(struct icmsg_hdr *icmsghdrp, u8 *buf,
 				const int *srv_version, int srv_vercnt,
 				int *nego_fw_version, int *nego_srv_version);
 
-void hv_process_channel_removal(struct vmbus_channel *channel, u32 relid);
+void hv_process_channel_removal(u32 relid);
 
 void vmbus_setevent(struct vmbus_channel *channel);
 /*
