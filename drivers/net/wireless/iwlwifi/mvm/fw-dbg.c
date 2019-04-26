@@ -577,7 +577,7 @@ void iwl_mvm_fw_error_dump(struct iwl_mvm *mvm)
 
 	dump_data = iwl_fw_error_next_data(dump_data);
 	/* We only dump the FIFOs if the FW is in error state */
-	if (test_bit(STATUS_FW_ERROR, &mvm->trans->status)) {
+	if (fifo_data_len) {
 		iwl_mvm_dump_fifos(mvm, &dump_data);
 		if (radio_len)
 			iwl_mvm_read_radio_reg(mvm, &dump_data);
