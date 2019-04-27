@@ -192,6 +192,10 @@ struct lbs_private {
 	const struct lbs_fw_table *fw_table;
 	const struct lbs_fw_table *fw_iter;
 	lbs_fw_cb fw_callback;
+
+#ifndef __GENKSYMS__
+	u8 power_up_on_resume;
+#endif
 };
 
 extern struct cmd_confirm_sleep confirm_sleep;
