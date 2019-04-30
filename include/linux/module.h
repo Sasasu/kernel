@@ -489,7 +489,11 @@ struct module {
 	ctor_fn_t *ctors;
 	unsigned int num_ctors;
 #endif
+#if defined(__GENKSYMS__) || !defined(CONFIG_ARM64_MODULE_PLTS)
 	void *suse_kabi_padding;
+#else
+	struct mod_arch_extend *arch_ext;
+#endif
 } ____cacheline_aligned;
 #ifndef MODULE_ARCH_INIT
 #define MODULE_ARCH_INIT {}

@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/sort.h>
+#include <linux/slab.h>
 
 static bool in_init(const struct module *mod, void *loc)
 {
@@ -19,8 +20,8 @@ static bool in_init(const struct module *mod, void *loc)
 u64 module_emit_plt_entry(struct module *mod, void *loc, const Elf64_Rela *rela,
 			  Elf64_Sym *sym)
 {
-	struct mod_plt_sec *pltsec = !in_init(mod, loc) ? &mod->arch.core :
-							  &mod->arch.init;
+	struct mod_plt_sec *pltsec = !in_init(mod, loc) ? &mod->arch_ext->core :
+							  &mod->arch_ext->init;
 	struct plt_entry *plt = (struct plt_entry *)pltsec->plt->sh_addr;
 	int i = pltsec->plt_num_entries;
 	u64 val = sym->st_value + rela->r_addend;
@@ -45,8 +46,8 @@ u64 module_emit_plt_entry(struct module *mod, void *loc, const Elf64_Rela *rela,
 #ifdef CONFIG_ARM64_ERRATUM_843419
 u64 module_emit_veneer_for_adrp(struct module *mod, void *loc, u64 val)
 {
-	struct mod_plt_sec *pltsec = !in_init(mod, loc) ? &mod->arch.core :
-							  &mod->arch.init;
+	struct mod_plt_sec *pltsec = !in_init(mod, loc) ? &mod->arch_ext->core :
+							  &mod->arch_ext->init;
 	struct plt_entry *plt = (struct plt_entry *)pltsec->plt->sh_addr;
 	int i = pltsec->plt_num_entries++;
 	u32 mov0, mov1, mov2, br;
@@ -203,20 +204,24 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 	Elf64_Sym *syms = NULL;
 	int i;
 
+	mod->arch_ext = kzalloc(sizeof(struct mod_arch_extend), GFP_KERNEL);
+
+	if (!mod->arch_ext)
+		return -ENOMEM;
 	/*
 	 * Find the empty .plt section so we can expand it to store the PLT
 	 * entries. Record the symtab address as well.
 	 */
 	for (i = 0; i < ehdr->e_shnum; i++) {
 		if (!strcmp(secstrings + sechdrs[i].sh_name, ".plt"))
-			mod->arch.core.plt = sechdrs + i;
+			mod->arch_ext->core.plt = sechdrs + i;
 		else if (!strcmp(secstrings + sechdrs[i].sh_name, ".init.plt"))
-			mod->arch.init.plt = sechdrs + i;
+			mod->arch_ext->init.plt = sechdrs + i;
 		else if (sechdrs[i].sh_type == SHT_SYMTAB)
 			syms = (Elf64_Sym *)sechdrs[i].sh_addr;
 	}
 
-	if (!mod->arch.core.plt || !mod->arch.init.plt) {
+	if (!mod->arch_ext->core.plt || !mod->arch_ext->init.plt) {
 		pr_err("%s: module PLT section(s) missing\n", mod->name);
 		return -ENOEXEC;
 	}
@@ -248,19 +253,26 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 						sechdrs[i].sh_info, dstsec);
 	}
 
-	mod->arch.core.plt->sh_type = SHT_NOBITS;
-	mod->arch.core.plt->sh_flags = SHF_EXECINSTR | SHF_ALLOC;
-	mod->arch.core.plt->sh_addralign = L1_CACHE_BYTES;
-	mod->arch.core.plt->sh_size = (core_plts  + 1) * sizeof(struct plt_entry);
-	mod->arch.core.plt_num_entries = 0;
-	mod->arch.core.plt_max_entries = core_plts;
+	mod->arch_ext->core.plt->sh_type = SHT_NOBITS;
+	mod->arch_ext->core.plt->sh_flags = SHF_EXECINSTR | SHF_ALLOC;
+	mod->arch_ext->core.plt->sh_addralign = L1_CACHE_BYTES;
+	mod->arch_ext->core.plt->sh_size =
+				(core_plts  + 1) * sizeof(struct plt_entry);
+	mod->arch_ext->core.plt_num_entries = 0;
+	mod->arch_ext->core.plt_max_entries = core_plts;
 
-	mod->arch.init.plt->sh_type = SHT_NOBITS;
-	mod->arch.init.plt->sh_flags = SHF_EXECINSTR | SHF_ALLOC;
-	mod->arch.init.plt->sh_addralign = L1_CACHE_BYTES;
-	mod->arch.init.plt->sh_size = (init_plts + 1) * sizeof(struct plt_entry);
-	mod->arch.init.plt_num_entries = 0;
-	mod->arch.init.plt_max_entries = init_plts;
+	mod->arch_ext->init.plt->sh_type = SHT_NOBITS;
+	mod->arch_ext->init.plt->sh_flags = SHF_EXECINSTR | SHF_ALLOC;
+	mod->arch_ext->init.plt->sh_addralign = L1_CACHE_BYTES;
+	mod->arch_ext->init.plt->sh_size =
+				(init_plts + 1) * sizeof(struct plt_entry);
+	mod->arch_ext->init.plt_num_entries = 0;
+	mod->arch_ext->init.plt_max_entries = init_plts;
 
 	return 0;
+}
+
+void module_arch_freeing_init(struct module *mod)
+{
+	kfree(mod->arch_ext);
 }

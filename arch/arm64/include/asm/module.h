@@ -21,13 +21,16 @@
 #define MODULE_ARCH_VERMAGIC	"aarch64"
 
 #ifdef CONFIG_ARM64_MODULE_PLTS
+struct mod_arch_specific {
+};
+
 struct mod_plt_sec {
 	struct elf64_shdr	*plt;
 	int			plt_num_entries;
 	int			plt_max_entries;
 };
 
-struct mod_arch_specific {
+struct mod_arch_extend {
 	struct mod_plt_sec	core;
 	struct mod_plt_sec	init;
 };
