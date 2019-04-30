@@ -21,6 +21,7 @@
 #include <asm/hpet.h>
 #include <asm/desc.h>
 #include <asm/cpufeature.h>
+#include <asm/mshyperv.h>
 
 #if defined(CONFIG_X86_64)
 unsigned int __read_mostly vdso64_enabled = 1;
@@ -103,6 +104,7 @@ static int map_vdso(const struct vdso_image *image, bool calculate_addr)
 		.pages = no_pages,
 	};
 	struct pvclock_vsyscall_time_info *pvti;
+	struct ms_hyperv_tsc_page *tsc_pg;
 
 	if (calculate_addr) {
 		addr = vdso_addr(current->mm->start_stack,
@@ -177,6 +179,17 @@ static int map_vdso(const struct vdso_image *image, bool calculate_addr)
 		ret = remap_pfn_range(vma,
 				      text_start + image->sym_pvclock_page,
 				      __pa(pvti) >> PAGE_SHIFT,
+				      PAGE_SIZE,
+				      PAGE_READONLY);
+
+		if (ret)
+			goto up_fail;
+	}
+	tsc_pg = hv_get_tsc_page();
+	if (tsc_pg && image->sym_hvclock_page) {
+		ret = remap_pfn_range(vma,
+				      text_start + image->sym_hvclock_page,
+				      vmalloc_to_pfn(tsc_pg),
 				      PAGE_SIZE,
 				      PAGE_READONLY);
 
