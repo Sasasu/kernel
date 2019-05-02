@@ -380,7 +380,8 @@ static inline int __do_cpuid_ent(struct kvm_cpuid_entry2 *entry, u32 function,
 	/* cpuid 7.0.edx*/
 	const u32 kvm_cpuid_7_0_edx_x86_features =
 		KF(AVX512_4VNNIW) | KF(AVX512_4FMAPS) | KF(SPEC_CTRL) |
-		KF(SPEC_CTRL_SSBD) | KF(ARCH_CAPABILITIES) | KF(INTEL_STIBP);
+		KF(SPEC_CTRL_SSBD) | KF(ARCH_CAPABILITIES) | KF(INTEL_STIBP) |
+		KF(MD_CLEAR);
 
 	/* all calls to cpuid_count() should be made on the same cpu */
 	get_cpu();

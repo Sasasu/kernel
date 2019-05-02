@@ -6,6 +6,7 @@
 /* These are scattered features in cpufeatures.h. */
 #define KVM_CPUID_BIT_AVX512_4VNNIW     2
 #define KVM_CPUID_BIT_AVX512_4FMAPS     3
+#define KVM_CPUID_BIT_MD_CLEAR		10
 #define KVM_CPUID_BIT_INTEL_STIBP	21
 #define KVM_CPUID_BIT_SPEC_CTRL		26
 #define KVM_CPUID_BIT_ARCH_CAPABILITIES	29
