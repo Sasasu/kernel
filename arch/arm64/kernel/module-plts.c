@@ -275,4 +275,5 @@ int module_frob_arch_sections(Elf_Ehdr *ehdr, Elf_Shdr *sechdrs,
 void module_arch_freeing_init(struct module *mod)
 {
 	kfree(mod->arch_ext);
+	mod->arch_ext = NULL;
 }
