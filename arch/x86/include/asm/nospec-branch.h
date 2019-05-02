@@ -3,6 +3,8 @@
 #ifndef _ASM_X86_NOSPEC_BRANCH_H_
 #define _ASM_X86_NOSPEC_BRANCH_H_
 
+#include <linux/static_key.h>
+
 #include <asm/alternative.h>
 #include <asm/alternative-asm.h>
 #include <asm/cpufeatures.h>
@@ -251,6 +253,8 @@ do {									\
 	preempt_enable();						\
 } while (0)
 
+DECLARE_STATIC_KEY_FALSE(mds_user_clear);
+
 #include <asm/segment.h>
 
 /**
@@ -274,6 +278,17 @@ static inline void mds_clear_cpu_buffers(void)
 	 * "cc" clobber is required because VERW modifies ZF.
 	 */
 	asm volatile("verw %[ds]" : : [ds] "m" (ds) : "cc");
+}
+
+/**
+ * mds_user_clear_cpu_buffers - Mitigation for MDS vulnerability
+ *
+ * Clear CPU buffers if the corresponding static key is enabled
+ */
+static inline void mds_user_clear_cpu_buffers(void)
+{
+	if (static_branch_likely(&mds_user_clear))
+		mds_clear_cpu_buffers();
 }
 
 #endif /* __ASSEMBLY__ */
