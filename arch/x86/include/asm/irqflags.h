@@ -8,6 +8,8 @@
  * Interrupt control:
  */
 
+#include <asm/nospec-branch.h>
+
 /* Declaration required for gcc < 4.9 to prevent -Werror=missing-prototypes */
 extern inline unsigned long native_save_fl(void);
 extern inline unsigned long native_save_fl(void)
@@ -49,11 +51,13 @@ static inline void native_irq_enable(void)
 
 static inline void native_safe_halt(void)
 {
+	mds_idle_clear_cpu_buffers();
 	asm volatile("sti; hlt": : :"memory");
 }
 
 static inline void native_halt(void)
 {
+	mds_idle_clear_cpu_buffers();
 	asm volatile("hlt": : :"memory");
 }
 
