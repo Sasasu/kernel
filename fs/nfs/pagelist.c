@@ -1029,6 +1029,17 @@ static void nfs_pageio_doio(struct nfs_pageio_descriptor *desc)
 	}
 }
 
+static void
+nfs_pageio_cleanup_request(struct nfs_pageio_descriptor *desc,
+		struct nfs_page *req)
+{
+	LIST_HEAD(head);
+
+	nfs_list_remove_request(req);
+	nfs_list_add_request(req, &head);
+	desc->pg_completion_ops->error_cleanup(&head);
+}
+
 /**
  * nfs_pageio_add_request - Attempt to coalesce a request into a page list.
  * @desc: destination io descriptor
@@ -1066,10 +1077,8 @@ static int __nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 			nfs_page_group_unlock(req);
 			desc->pg_moreio = 1;
 			nfs_pageio_doio(desc);
-			if (desc->pg_error < 0)
-				return 0;
-			if (mirror->pg_recoalesce)
-				return 0;
+			if (desc->pg_error < 0 || mirror->pg_recoalesce)
+				goto out_cleanup_subreq;
 			/* retry add_request for this subreq */
 			nfs_page_group_lock(req, false);
 			continue;
@@ -1101,6 +1110,10 @@ static int __nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 err_ptr:
 	desc->pg_error = PTR_ERR(subreq);
 	nfs_page_group_unlock(req);
+	return 0;
+out_cleanup_subreq:
+	if (req != subreq)
+		nfs_pageio_cleanup_request(desc, subreq);
 	return 0;
 }
 
@@ -1153,6 +1166,7 @@ static int nfs_pageio_add_request_mirror(struct nfs_pageio_descriptor *desc,
 int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 			   struct nfs_page *req)
 {
+	struct nfs_pgio_mirror *mirror = nfs_pgio_current_mirror(desc);
 	u32 midx;
 	unsigned int pgbase, offset, bytes;
 	struct nfs_page *dupreq, *lastreq;
@@ -1163,7 +1177,7 @@ int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 
 	nfs_pageio_setup_mirroring(desc, req);
 	if (desc->pg_error < 0)
-		return 0;
+		goto out_failed;
 
 	for (midx = 0; midx < desc->pg_mirror_count; midx++) {
 		if (midx) {
@@ -1180,7 +1194,8 @@ int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 
 			if (IS_ERR(dupreq)) {
 				nfs_page_group_unlock(req);
-				return 0;
+				desc->pg_error = PTR_ERR(dupreq);
+				goto out_failed;
 			}
 
 			nfs_lock_request(dupreq);
@@ -1193,10 +1208,22 @@ int nfs_pageio_add_request(struct nfs_pageio_descriptor *desc,
 		if (nfs_pgio_has_mirroring(desc))
 			desc->pg_mirror_idx = midx;
 		if (!nfs_pageio_add_request_mirror(desc, dupreq))
-			return 0;
+			goto out_cleanup_subreq;
 	}
 
 	return 1;
+
+out_cleanup_subreq:
+	if (req != dupreq)
+		nfs_pageio_cleanup_request(desc, dupreq);
+out_failed:
+	/*
+	 * We might have failed before sending any reqs over wire.
+	 * clean up rest of the reqs in mirror pg_list
+	 */
+	if (desc->pg_error)
+		desc->pg_completion_ops->error_cleanup(&mirror->pg_list);
+	return 0;
 }
 
 /*
