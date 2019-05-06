@@ -2844,7 +2844,6 @@ static int qgroup_reserve(struct btrfs_root *root, u64 num_bytes, bool enforce,
 
 		qg = u64_to_ptr(unode->aux);
 
-		trace_qgroup_update_reserve(fs_info, qg, num_bytes, type);
 		qgroup_rsv_add(fs_info, qg, num_bytes, type);
 	}
 
@@ -2911,7 +2910,6 @@ void btrfs_qgroup_free_refroot(struct btrfs_fs_info *fs_info,
 
 		qg = u64_to_ptr(unode->aux);
 
-		trace_qgroup_update_reserve(fs_info, qg, -(s64)num_bytes, type);
 		qgroup_rsv_release(fs_info, qg, num_bytes, type);
 
 		list_for_each_entry(glist, &qg->groups, next_group) {
