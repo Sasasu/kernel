@@ -32,6 +32,17 @@ struct btrfs_qgroup_extent_record {
 	struct rb_node node;
 	u64 bytenr;
 	u64 num_bytes;
+
+	/*
+	 * For qgroup reserved data space freeing.
+	 *
+	 * @data_rsv_refroot and @data_rsv will be recorded after
+	 * BTRFS_ADD_DELAYED_EXTENT is called.
+	 * And will be used to free reserved qgroup space at
+	 * transaction commit time.
+	 */
+	u32 data_rsv;		/* reserved data space needs to be freed */
+	u64 data_rsv_refroot;	/* which root the reserved data belongs to */
 	struct ulist *old_roots;
 };
 
@@ -297,17 +308,6 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans,
 void btrfs_qgroup_free_refroot(struct btrfs_fs_info *fs_info,
 			       u64 ref_root, u64 num_bytes,
 			       enum btrfs_qgroup_rsv_type type);
-/*
- * TODO: Add proper trace point for it, as btrfs_qgroup_free() is
- * called by everywhere, can't provide good trace for delayed ref case.
- */
-static inline void btrfs_qgroup_free_delayed_ref(struct btrfs_fs_info *fs_info,
-						 u64 ref_root, u64 num_bytes)
-{
-	btrfs_qgroup_free_refroot(fs_info, ref_root, num_bytes,
-				  BTRFS_QGROUP_RSV_DATA);
-	trace_btrfs_qgroup_free_delayed_ref(fs_info, ref_root, num_bytes);
-}
 void assert_qgroups_uptodate(struct btrfs_trans_handle *trans);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
