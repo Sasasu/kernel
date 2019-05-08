@@ -4039,9 +4039,10 @@ ring_buffer_consume(struct ring_buffer *buffer, int cpu, u64 *ts,
 EXPORT_SYMBOL_GPL(ring_buffer_consume);
 
 /**
- * ring_buffer_read_prepare - Prepare for a non consuming read of the buffer
+ * ring_buffer_read_prepare3 - Prepare for a non consuming read of the buffer
  * @buffer: The ring buffer to read from
  * @cpu: The cpu buffer to iterate over
+ * @flags: gfp flags to use for memory allocation
  *
  * This performs the initial preparations necessary to iterate
  * through the buffer.  Memory is allocated, buffer recording
@@ -4051,7 +4052,7 @@ EXPORT_SYMBOL_GPL(ring_buffer_consume);
  * corrupted. This is not a consuming read, so a producer is not
  * expected.
  *
- * After a sequence of ring_buffer_read_prepare calls, the user is
+ * After a sequence of ring_buffer_read_prepare3 calls, the user is
  * expected to make at least one call to ring_buffer_read_prepare_sync.
  * Afterwards, ring_buffer_read_start is invoked to get things going
  * for real.
@@ -4059,7 +4060,7 @@ EXPORT_SYMBOL_GPL(ring_buffer_consume);
  * This overall must be paired with ring_buffer_read_finish.
  */
 struct ring_buffer_iter *
-ring_buffer_read_prepare(struct ring_buffer *buffer, int cpu)
+ring_buffer_read_prepare3(struct ring_buffer *buffer, int cpu, gfp_t flags)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
 	struct ring_buffer_iter *iter;
@@ -4067,7 +4068,7 @@ ring_buffer_read_prepare(struct ring_buffer *buffer, int cpu)
 	if (!cpumask_test_cpu(cpu, buffer->cpumask))
 		return NULL;
 
-	iter = kmalloc(sizeof(*iter), GFP_KERNEL);
+	iter = kmalloc(sizeof(*iter), flags);
 	if (!iter)
 		return NULL;
 
@@ -4079,6 +4080,13 @@ ring_buffer_read_prepare(struct ring_buffer *buffer, int cpu)
 	atomic_inc(&cpu_buffer->record_disabled);
 
 	return iter;
+}
+EXPORT_SYMBOL_GPL(ring_buffer_read_prepare3);
+
+struct ring_buffer_iter *
+ring_buffer_read_prepare(struct ring_buffer *buffer, int cpu)
+{
+	return ring_buffer_read_prepare3(buffer, cpu, GFP_KERNEL);
 }
 EXPORT_SYMBOL_GPL(ring_buffer_read_prepare);
 
