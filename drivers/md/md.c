@@ -4857,8 +4857,8 @@ suspend_lo_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->pers->quiesce(mddev, 2);
 	else {
 		/* Expanding suspended region - need to wait */
-		mddev->pers->quiesce(mddev, 1);
-		mddev->pers->quiesce(mddev, 0);
+		mddev_suspend(mddev);
+		mddev_resume(mddev);
 	}
 	err = 0;
 unlock:
@@ -4900,8 +4900,8 @@ suspend_hi_store(struct mddev *mddev, const char *buf, size_t len)
 		mddev->pers->quiesce(mddev, 2);
 	else {
 		/* Expanding suspended region - need to wait */
-		mddev->pers->quiesce(mddev, 1);
-		mddev->pers->quiesce(mddev, 0);
+		mddev_suspend(mddev);
+		mddev_resume(mddev);
 	}
 	err = 0;
 unlock:
@@ -6620,7 +6620,7 @@ static int set_bitmap_file(struct mddev *mddev, int fd)
 		return -ENOENT; /* cannot remove what isn't there */
 	err = 0;
 	if (mddev->pers) {
-		mddev->pers->quiesce(mddev, 1);
+		mddev_suspend(mddev);
 		if (fd >= 0) {
 			struct bitmap *bitmap;
 
@@ -6635,7 +6635,7 @@ static int set_bitmap_file(struct mddev *mddev, int fd)
 			bitmap_destroy(mddev);
 			fd = -1; /* make sure to put the file */
 		}
-		mddev->pers->quiesce(mddev, 0);
+		mddev_resume(mddev);
 	}
 	if (fd < 0) {
 		struct file *f = mddev->bitmap_info.file;
@@ -6919,7 +6919,7 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				mddev->bitmap_info.default_offset;
 			mddev->bitmap_info.space =
 				mddev->bitmap_info.default_space;
-			mddev->pers->quiesce(mddev, 1);
+			mddev_suspend(mddev);
 			bitmap = bitmap_create(mddev, -1);
 			if (!IS_ERR(bitmap)) {
 				mddev->bitmap = bitmap;
@@ -6928,7 +6928,7 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				rv = PTR_ERR(bitmap);
 			if (rv)
 				bitmap_destroy(mddev);
-			mddev->pers->quiesce(mddev, 0);
+			mddev_resume(mddev);
 		} else {
 			/* remove the bitmap */
 			if (!mddev->bitmap) {
@@ -6951,9 +6951,9 @@ static int update_array_info(struct mddev *mddev, mdu_array_info_t *info)
 				mddev->bitmap_info.nodes = 0;
 				md_cluster_ops->leave(mddev);
 			}
-			mddev->pers->quiesce(mddev, 1);
+			mddev_suspend(mddev);
 			bitmap_destroy(mddev);
-			mddev->pers->quiesce(mddev, 0);
+			mddev_resume(mddev);
 			mddev->bitmap_info.offset = 0;
 		}
 	}
