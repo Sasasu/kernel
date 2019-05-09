@@ -772,6 +772,7 @@ static int uas_slave_alloc(struct scsi_device *sdev)
 {
 	struct uas_dev_info *devinfo =
 		(struct uas_dev_info *)sdev->host->hostdata;
+	int maxp;
 
 	sdev->hostdata = devinfo;
 
@@ -790,6 +791,9 @@ static int uas_slave_alloc(struct scsi_device *sdev)
 	 * values can be as large as 2048.  To make that work properly
 	 * will require changes to the block layer.
 	 */
+	maxp = usb_maxpacket(devinfo->udev, devinfo->data_in_pipe, 0);
+	blk_queue_virt_boundary(sdev->request_queue, maxp - 1);
+
 	blk_queue_update_dma_alignment(sdev->request_queue, (512 - 1));
 
 	if (devinfo->flags & US_FL_MAX_SECTORS_64)
