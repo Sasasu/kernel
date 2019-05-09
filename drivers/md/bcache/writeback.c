@@ -494,7 +494,9 @@ void bcache_dev_sectors_dirty_add(struct cache_set *c, unsigned int inode,
 
 static bool dirty_pred(struct keybuf *buf, struct bkey *k)
 {
-	struct cached_dev *dc = container_of(buf, struct cached_dev, writeback_keys);
+	struct cached_dev *dc = container_of(buf,
+					     struct cached_dev,
+					     writeback_keys);
 
 	BUG_ON(KEY_INODE(k) != dc->disk.id);
 
