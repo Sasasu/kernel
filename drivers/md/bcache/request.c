@@ -394,7 +394,7 @@ static bool check_should_bypass(struct cached_dev *dc, struct bio *bio)
 	 * unless the read-ahead request is for metadata (eg, for gfs2).
 	 */
 	if (bio->bi_opf & (REQ_RAHEAD|REQ_BACKGROUND) &&
-	    !(bio->bi_opf & REQ_META))
+	    !(bio->bi_opf & REQ_PRIO))
 		goto skip;
 
 	if (bio->bi_iter.bi_sector & (c->sb.block_size - 1) ||
@@ -876,7 +876,7 @@ static int cached_dev_cache_miss(struct btree *b, struct search *s,
 	}
 
 	if (!(bio->bi_opf & REQ_RAHEAD) &&
-	    !(bio->bi_opf & REQ_META) &&
+	    !(bio->bi_opf & REQ_PRIO) &&
 	    s->iop.c->gc_stats.in_use < CUTOFF_CACHE_READA)
 		reada = min_t(sector_t, dc->readahead >> 9,
 			      bdev_sectors(bio->bi_bdev) - bio_end_sector(bio));
