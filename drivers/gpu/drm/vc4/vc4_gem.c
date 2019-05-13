@@ -144,7 +144,7 @@ vc4_save_hang_state(struct drm_device *dev)
 	struct vc4_exec_info *exec[2];
 	struct vc4_bo *bo;
 	unsigned long irqflags;
-	unsigned int i, j, unref_list_count, prev_idx;
+	unsigned int i, j, k, unref_list_count;
 
 	kernel_state = kcalloc(1, sizeof(*kernel_state), GFP_KERNEL);
 	if (!kernel_state)
@@ -180,23 +180,23 @@ vc4_save_hang_state(struct drm_device *dev)
 		return;
 	}
 
-	prev_idx = 0;
+	k = 0;
 	for (i = 0; i < 2; i++) {
 		if (!exec[i])
 			continue;
 
 		for (j = 0; j < exec[i]->bo_count; j++) {
 			drm_gem_object_reference(&exec[i]->bo[j]->base);
-			kernel_state->bo[j + prev_idx] = &exec[i]->bo[j]->base;
+			kernel_state->bo[k++] = &exec[i]->bo[j]->base;
 		}
 
 		list_for_each_entry(bo, &exec[i]->unref_list, unref_head) {
 			drm_gem_object_reference(&bo->base.base);
-			kernel_state->bo[j + prev_idx] = &bo->base.base;
-			j++;
+			kernel_state->bo[k++] = &bo->base.base;
 		}
-		prev_idx = j + 1;
 	}
+
+	WARN_ON_ONCE(k != state->bo_count);
 
 	if (exec[0])
 		state->start_bin = exec[0]->ct0ca;
@@ -403,6 +403,19 @@ vc4_flush_caches(struct drm_device *dev)
 		  VC4_SET_FIELD(0xf, V3D_SLCACTL_ICC));
 }
 
+static void
+vc4_flush_texture_caches(struct drm_device *dev)
+{
+	struct vc4_dev *vc4 = to_vc4_dev(dev);
+
+	V3D_WRITE(V3D_L2CACTL,
+		  V3D_L2CACTL_L2CCLR);
+
+	V3D_WRITE(V3D_SLCACTL,
+		  VC4_SET_FIELD(0xf, V3D_SLCACTL_T1CC) |
+		  VC4_SET_FIELD(0xf, V3D_SLCACTL_T0CC));
+}
+
 /* Sets the registers for the next job to be actually be executed in
  * the hardware.
  *
@@ -445,6 +458,14 @@ vc4_submit_next_render_job(struct drm_device *dev)
 	if (!exec)
 		return;
 
+	/* A previous RCL may have written to one of our textures, and
+	 * our full cache flush at bin time may have occurred before
+	 * that RCL completed.  Flush the texture cache now, but not
+	 * the instructions or uniforms (since we don't write those
+	 * from an RCL).
+	 */
+	vc4_flush_texture_caches(dev);
+
 	submit_cl(dev, 1, exec->ct1ca, exec->ct1ea);
 }
 
@@ -472,6 +493,11 @@ vc4_update_bo_seqnos(struct vc4_exec_info *exec, uint64_t seqno)
 
 	list_for_each_entry(bo, &exec->unref_list, unref_head) {
 		bo->seqno = seqno;
+	}
+
+	for (i = 0; i < exec->rcl_write_bo_count; i++) {
+		bo = to_vc4_bo(&exec->rcl_write_bo[i]->base);
+		bo->write_seqno = seqno;
 	}
 }
 
@@ -545,14 +571,15 @@ vc4_cl_lookup_bos(struct drm_device *dev,
 
 	handles = drm_malloc_ab(exec->bo_count, sizeof(uint32_t));
 	if (!handles) {
+		ret = -ENOMEM;
 		DRM_ERROR("Failed to allocate incoming GEM handles\n");
 		goto fail;
 	}
 
-	ret = copy_from_user(handles,
-			     (void __user *)(uintptr_t)args->bo_handles,
-			     exec->bo_count * sizeof(uint32_t));
-	if (ret) {
+	if (copy_from_user(handles,
+			   (void __user *)(uintptr_t)args->bo_handles,
+			   exec->bo_count * sizeof(uint32_t))) {
+		ret = -EFAULT;
 		DRM_ERROR("Failed to copy in GEM handles\n");
 		goto fail;
 	}
@@ -574,8 +601,8 @@ vc4_cl_lookup_bos(struct drm_device *dev,
 	spin_unlock(&file_priv->table_lock);
 
 fail:
-	kfree(handles);
-	return 0;
+	drm_free_large(handles);
+	return ret;
 }
 
 static int
@@ -677,6 +704,14 @@ vc4_get_bcl(struct drm_device *dev, struct vc4_exec_info *exec)
 		goto fail;
 
 	ret = vc4_validate_shader_recs(dev, exec);
+	if (ret)
+		goto fail;
+
+	/* Block waiting on any previous rendering into the CS's VBO,
+	 * IB, or textures, so that pixels are actually written by the
+	 * time we try to read them.
+	 */
+	ret = vc4_wait_for_seqno(dev, exec->bin_dep_seqno, ~0ull, true);
 
 fail:
 	kfree(temp);
@@ -949,8 +984,8 @@ vc4_gem_destroy(struct drm_device *dev)
 		vc4->overflow_mem = NULL;
 	}
 
-	vc4_bo_cache_destroy(dev);
-
 	if (vc4->hang_state)
 		vc4_free_hang_state(dev, vc4->hang_state);
+
+	vc4_bo_cache_destroy(dev);
 }
