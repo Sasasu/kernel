@@ -1754,10 +1754,8 @@ int vb2_core_streamon(struct vb2_queue *q, unsigned int type)
 	 */
 	if (q->queued_count >= q->min_buffers_needed) {
 		ret = vb2_start_streaming(q);
-		if (ret) {
-			__vb2_queue_cancel(q);
+		if (ret)
 			return ret;
-		}
 	}
 
 	q->streaming = 1;
