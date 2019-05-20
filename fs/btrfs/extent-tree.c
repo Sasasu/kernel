@@ -2099,16 +2099,19 @@ int btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 {
 	int old_ref_mod, new_ref_mod;
 	int ret;
+	struct btrfs_ref generic_ref = { 0 };
 	struct btrfs_fs_info *fs_info = root->fs_info;
 
 	BUG_ON(owner < BTRFS_FIRST_FREE_OBJECTID &&
 	       root_objectid == BTRFS_TREE_LOG_OBJECTID);
 
+	btrfs_init_generic_ref(&generic_ref, BTRFS_ADD_DELAYED_REF, bytenr,
+			       num_bytes, parent);
+	generic_ref.real_root = root->root_key.objectid;
 	if (owner < BTRFS_FIRST_FREE_OBJECTID) {
-		ret = btrfs_add_delayed_tree_ref(fs_info, trans, bytenr,
-					num_bytes,
-					parent, root_objectid, (int)owner,
-					BTRFS_ADD_DELAYED_REF, NULL,
+		btrfs_init_tree_ref(&generic_ref, (int)owner, root_objectid);
+		ret = btrfs_add_delayed_tree_ref(fs_info, trans,
+					&generic_ref, NULL,
 					&old_ref_mod, &new_ref_mod);
 	} else {
 		ret = btrfs_add_delayed_data_ref(fs_info, trans, bytenr,
@@ -7176,17 +7179,20 @@ void btrfs_free_tree_block(struct btrfs_trans_handle *trans,
 			   struct extent_buffer *buf,
 			   u64 parent, int last_ref)
 {
+	struct btrfs_ref generic_ref = { 0 };
 	int pin = 1;
 	int ret;
+
+	btrfs_init_generic_ref(&generic_ref, BTRFS_DROP_DELAYED_REF,
+			       buf->start, buf->len, parent);
+	btrfs_init_tree_ref(&generic_ref, btrfs_header_level(buf),
+			    root->root_key.objectid);
 
 	if (root->root_key.objectid != BTRFS_TREE_LOG_OBJECTID) {
 		int old_ref_mod, new_ref_mod;
 
 		ret = btrfs_add_delayed_tree_ref(root->fs_info, trans,
-					buf->start, buf->len,
-					parent, root->root_key.objectid,
-					btrfs_header_level(buf),
-					BTRFS_DROP_DELAYED_REF, NULL,
+					&generic_ref, NULL,
 					&old_ref_mod, &new_ref_mod);
 		BUG_ON(ret); /* -ENOMEM */
 		pin = old_ref_mod >= 0 && new_ref_mod < 0;
@@ -7240,10 +7246,14 @@ int btrfs_free_extent(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 	int old_ref_mod, new_ref_mod;
 	int ret;
 	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct btrfs_ref generic_ref = { 0 };
 
 	if (btrfs_test_is_dummy_root(root))
 		return 0;
 
+	btrfs_init_generic_ref(&generic_ref, BTRFS_DROP_DELAYED_REF, bytenr,
+			       num_bytes, parent);
+	generic_ref.real_root = root->root_key.objectid;
 	/*
 	 * tree log blocks never actually go into the extent allocation
 	 * tree, just update pinning info and exit early.
@@ -7255,10 +7265,9 @@ int btrfs_free_extent(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		old_ref_mod = new_ref_mod = 0;
 		ret = 0;
 	} else if (owner < BTRFS_FIRST_FREE_OBJECTID) {
-		ret = btrfs_add_delayed_tree_ref(fs_info, trans, bytenr,
-					num_bytes,
-					parent, root_objectid, (int)owner,
-					BTRFS_DROP_DELAYED_REF, NULL,
+		btrfs_init_tree_ref(&generic_ref, (int)owner, root_objectid);
+		ret = btrfs_add_delayed_tree_ref(fs_info, trans,
+					&generic_ref, NULL,
 					&old_ref_mod, &new_ref_mod);
 	} else {
 		ret = btrfs_add_delayed_data_ref(fs_info, trans, bytenr,
@@ -8391,6 +8400,7 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 	struct btrfs_block_rsv *block_rsv;
 	struct extent_buffer *buf;
 	struct btrfs_delayed_extent_op *extent_op;
+	struct btrfs_ref generic_ref = { 0 };
 	u64 flags = 0;
 	int ret;
 	u32 blocksize = root->nodesize;
@@ -8445,10 +8455,12 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 		extent_op->is_data = false;
 		extent_op->level = level;
 
+		btrfs_init_generic_ref(&generic_ref, BTRFS_ADD_DELAYED_EXTENT,
+				       ins.objectid, ins.offset, parent);
+		generic_ref.real_root = root->root_key.objectid;
+		btrfs_init_tree_ref(&generic_ref, level, root_objectid);
 		ret = btrfs_add_delayed_tree_ref(root->fs_info, trans,
-						 ins.objectid, ins.offset,
-						 parent, root_objectid, level,
-						 BTRFS_ADD_DELAYED_EXTENT,
+						 &generic_ref,
 						 extent_op, NULL, NULL);
 		if (ret)
 			goto out_free_delayed;
