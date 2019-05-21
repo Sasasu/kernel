@@ -2507,6 +2507,7 @@ static noinline int relink_extent_backref(struct btrfs_path *path,
 	struct btrfs_file_extent_item *item;
 	struct btrfs_ordered_extent *ordered;
 	struct btrfs_trans_handle *trans;
+	struct btrfs_ref ref = { 0 };
 	struct btrfs_fs_info *fs_info;
 	struct btrfs_root *root;
 	struct btrfs_key key;
@@ -2679,10 +2680,11 @@ again:
 	inode_add_bytes(inode, len);
 	btrfs_release_path(path);
 
-	ret = btrfs_inc_extent_ref(trans, root, new->bytenr,
-			new->disk_len, 0,
-			backref->root_id, backref->inum,
-			new->file_pos);	/* start - extent_offset */
+	btrfs_init_generic_ref(&ref, BTRFS_ADD_DELAYED_REF, new->bytenr,
+			       new->disk_len, 0);
+	btrfs_init_data_ref(&ref, backref->root_id, backref->inum,
+			    new->file_pos);  /* start - extent_offset */
+	ret = btrfs_inc_extent_ref(trans, &ref);
 	if (ret) {
 		btrfs_abort_transaction(trans, ret);
 		goto out_free_path;
@@ -4641,12 +4643,16 @@ delete:
 		if (found_extent &&
 		    (test_bit(BTRFS_ROOT_REF_COWS, &root->state) ||
 		     root == root->fs_info->tree_root)) {
+			struct btrfs_ref ref = { 0 };
+
 			btrfs_set_path_blocking(path);
 			bytes_deleted += extent_num_bytes;
-			ret = btrfs_free_extent(trans, root, extent_start,
-						extent_num_bytes, 0,
-						btrfs_header_owner(leaf),
-						ino, extent_offset);
+			btrfs_init_generic_ref(&ref, BTRFS_DROP_DELAYED_REF,
+					extent_start, extent_num_bytes, 0);
+			ref.real_root = root->root_key.objectid;
+			btrfs_init_data_ref(&ref, btrfs_header_owner(leaf),
+					ino, extent_offset);
+			ret = btrfs_free_extent(trans, &ref);
 			BUG_ON(ret);
 			if (btrfs_should_throttle_delayed_refs(trans, root))
 				btrfs_async_run_delayed_refs(root,
