@@ -76,6 +76,13 @@ struct tlb_state {
 	 * disabling interrupts when modifying either one.
 	 */
 	unsigned long cr4;
+#ifndef __GENKSYMS__
+	/* Last user mm for optimizing IBPB */
+	union {
+		struct mm_struct	*last_user_mm;
+		unsigned long		last_user_mm_ibpb;
+	};
+#endif
 };
 DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate);
 

@@ -7,8 +7,8 @@
 #define KVM_CPUID_BIT_AVX512_4VNNIW     2
 #define KVM_CPUID_BIT_AVX512_4FMAPS     3
 #define KVM_CPUID_BIT_MD_CLEAR		10
-#define KVM_CPUID_BIT_INTEL_STIBP	21
 #define KVM_CPUID_BIT_SPEC_CTRL		26
+#define KVM_CPUID_BIT_INTEL_STIBP	27
 #define KVM_CPUID_BIT_ARCH_CAPABILITIES	29
 #define KVM_CPUID_BIT_SPEC_CTRL_SSBD	31
 #define KF(x) bit(KVM_CPUID_BIT_##x)
@@ -193,7 +193,7 @@ static inline bool guest_cpuid_has_spec_ctrl(struct kvm_vcpu *vcpu)
 	struct kvm_cpuid_entry2 *best;
 
 	best = kvm_find_cpuid_entry(vcpu, 0x80000008, 0);
-	if (best && (best->ebx & bit(X86_FEATURE_AMD_IBRS)))
+	if (best && (best->ebx & (bit(X86_FEATURE_AMD_IBRS | bit(X86_FEATURE_AMD_SSBD)))))
 		return true;
 	best = kvm_find_cpuid_entry(vcpu, 7, 0);
 	return best && (best->edx & (bit(KVM_CPUID_BIT_SPEC_CTRL) | bit(KVM_CPUID_BIT_SPEC_CTRL_SSBD)));

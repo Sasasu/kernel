@@ -309,7 +309,7 @@ bool ptrace_may_access_sched(struct task_struct *task, unsigned int mode)
 }
 
 int ___ptrace_may_access(struct task_struct *cur, struct task_struct *task,
-			 unsigned int mode)
+                        unsigned int mode)
 {
 	/*
 	 * !upstream crap leftovers kept for kABI compliance.

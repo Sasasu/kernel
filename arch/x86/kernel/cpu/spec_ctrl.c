@@ -18,7 +18,7 @@
  * on IBRS state (SKL).
  */
 int ibrs_state = -1;
-int ibpb_state = -1;
+int _ibpb_state = -1;
 
 unsigned int notrace x86_ibrs_enabled(void)
 {
@@ -30,7 +30,7 @@ EXPORT_SYMBOL_GPL(x86_ibrs_enabled);
 
 unsigned int notrace x86_ibpb_enabled(void)
 {
-	if (ibpb_state != 1)
+	if (_ibpb_state != 1)
 		return 0;
 	return 1;
 }
@@ -56,7 +56,7 @@ EXPORT_SYMBOL_GPL(x86_enable_ibrs);
 void x86_spec_check(void)
 {
 
-	if (ibpb_state == 0) {
+	if (_ibpb_state == 0) {
 		printk_once(KERN_INFO "IBRS/IBPB: disabled\n");
 		return;
 	}
@@ -68,7 +68,7 @@ void x86_spec_check(void)
 			printk_once(KERN_INFO "IBRS: initialized\n");
 		}
 		printk_once(KERN_INFO "IBPB: initialized\n");
-		ibpb_state = 1;
+		_ibpb_state = 1;
 
 		setup_force_cpu_cap(X86_FEATURE_SPEC_CTRL);
 		setup_force_cpu_cap(X86_FEATURE_MSR_SPEC_CTRL);
@@ -76,10 +76,10 @@ void x86_spec_check(void)
 
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
 		if (cpuid_ebx(0x80000008) & BIT(12)) {
-			ibpb_state = 1;
+			_ibpb_state = 1;
 			printk_once(KERN_INFO "IBPB: Initialized\n");
 		} else {
-			ibpb_state = 0;
+			_ibpb_state = 0;
 		}
 	}
 }
@@ -95,7 +95,7 @@ int nospec(char *str)
 	setup_clear_cpu_cap(X86_FEATURE_SPEC_CTRL);
 	clear_bit(X86_FEATURE_SPEC_CTRL, (unsigned long *)cpu_caps_set);
 	ibrs_state = 0;
-	ibpb_state = 0;
+	_ibpb_state = 0;
 
 	return 0;
 }

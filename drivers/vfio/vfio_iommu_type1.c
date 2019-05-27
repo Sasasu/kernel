@@ -54,6 +54,7 @@ module_param_named(disable_hugepages,
 		   disable_hugepages, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_hugepages,
 		 "Disable VFIO IOMMU support for IOMMU hugepages.");
+
 static unsigned int dma_entry_limit __read_mostly = U16_MAX;
 module_param_named(dma_entry_limit, dma_entry_limit, uint, 0644);
 MODULE_PARM_DESC(dma_entry_limit,

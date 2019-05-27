@@ -88,7 +88,7 @@
 
 #else /* __ASSEMBLY__ */
 extern int ibrs_state;
-extern int ibpb_state;
+extern int _ibpb_state;
 void x86_enable_ibrs(void);
 void x86_disable_ibrs(void);
 unsigned int x86_ibrs_enabled(void);
