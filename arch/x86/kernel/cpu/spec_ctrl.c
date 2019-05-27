@@ -22,13 +22,17 @@ int ibpb_state = -1;
 
 unsigned int notrace x86_ibrs_enabled(void)
 {
-	return ibrs_state == 1;
+	if (ibrs_state != 1)
+		return 0;
+	return 1;
 }
 EXPORT_SYMBOL_GPL(x86_ibrs_enabled);
 
 unsigned int notrace x86_ibpb_enabled(void)
 {
-	return ibpb_state == 1;
+	if (ibpb_state != 1)
+		return 0;
+	return 1;
 }
 EXPORT_SYMBOL_GPL(x86_ibpb_enabled);
 

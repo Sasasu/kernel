@@ -400,16 +400,6 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 	else
 		spec2_print_if_insecure(mitigation_options[i].option);
 
-	/* Disable IBRS when retpoline has been selected: */
-	if (cmd == SPECTRE_V2_CMD_RETPOLINE ||
-	    cmd == SPECTRE_V2_CMD_RETPOLINE_AMD ||
-	    cmd == SPECTRE_V2_CMD_RETPOLINE_GENERIC) {
-		if (x86_ibrs_enabled()) {
-			pr_err("disabling IBRS, retpolines selected by user\n");
-			ibrs_state = 0;
-		}
-	}
-
 	return cmd;
 }
 
