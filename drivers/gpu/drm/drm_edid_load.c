@@ -281,7 +281,7 @@ int drm_load_edid_firmware(struct drm_connector *connector)
 	 */
 	fwstr = kstrdup(edid_firmware, GFP_KERNEL);
 	if (!fwstr)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	edidstr = fwstr;
 
 	while ((edidname = strsep(&edidstr, ","))) {
