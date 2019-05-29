@@ -35,6 +35,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/log2.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
 #include <linux/tty_driver.h>
@@ -270,40 +271,14 @@ static DEVICE_ATTR(iCountryCodeRelDate, S_IRUGO, show_country_rel_date, NULL);
 /*
  * Interrupt handlers for various ACM device responses
  */
-
-/* control interface reports status changes with "interrupt" transfers */
-static void acm_ctrl_irq(struct urb *urb)
+static void acm_process_notification(struct acm *acm, unsigned char *buf)
 {
-	struct acm *acm = urb->context;
-	struct usb_cdc_notification *dr = urb->transfer_buffer;
-	unsigned char *data;
 	int newctrl;
 	int difference;
-	int retval;
-	int status = urb->status;
 
-	switch (status) {
-	case 0:
-		/* success */
-		break;
-	case -ECONNRESET:
-	case -ENOENT:
-	case -ESHUTDOWN:
-		/* this urb is terminated, clean up */
-		dev_dbg(&acm->control->dev,
-				"%s - urb shutting down with status: %d\n",
-				__func__, status);
-		return;
-	default:
-		dev_dbg(&acm->control->dev,
-				"%s - nonzero urb status received: %d\n",
-				__func__, status);
-		goto exit;
-	}
+  struct usb_cdc_notification *dr = (struct usb_cdc_notification *)buf;
+  unsigned char *data = buf + sizeof(struct usb_cdc_notification);
 
-	usb_mark_last_busy(acm->dev);
-
-	data = (unsigned char *)(dr + 1);
 	switch (dr->bNotificationType) {
 	case USB_CDC_NOTIFY_NETWORK_CONNECTION:
 		dev_dbg(&acm->control->dev, "%s - network connection: %d\n",
@@ -356,9 +331,83 @@ static void acm_ctrl_irq(struct urb *urb)
 			"%s - unknown notification %d received: index %d len %d\n",
 			__func__,
 			dr->bNotificationType, dr->wIndex, dr->wLength);
-
-		break;
 	}
+}
+
+/* control interface reports status changes with "interrupt" transfers */
+static void acm_ctrl_irq(struct urb *urb)
+{
+	struct acm *acm = urb->context;
+	struct usb_cdc_notification *dr = urb->transfer_buffer;
+	unsigned int current_size = urb->actual_length;
+	unsigned int expected_size, copy_size, alloc_size;
+	int retval;
+	int status = urb->status;
+
+	switch (status) {
+	case 0:
+		/* success */
+		break;
+	case -ECONNRESET:
+	case -ENOENT:
+	case -ESHUTDOWN:
+		/* this urb is terminated, clean up */
+		acm->nb_index = 0;
+		dev_dbg(&acm->control->dev,
+			"%s - urb shutting down with status: %d\n",
+			__func__, status);
+		return;
+	default:
+		dev_dbg(&acm->control->dev,
+			"%s - nonzero urb status received: %d\n",
+			__func__, status);
+		goto exit;
+	}
+
+	usb_mark_last_busy(acm->dev);
+
+	if (acm->nb_index)
+		dr = (struct usb_cdc_notification *)acm->notification_buffer;
+
+	/* size = notification-header + (optional) data */
+	expected_size = sizeof(struct usb_cdc_notification) +
+					le16_to_cpu(dr->wLength);
+
+	if (current_size < expected_size) {
+		/* notification is transmitted fragmented, reassemble */
+		if (acm->nb_size < expected_size) {
+			if (acm->nb_size) {
+				kfree(acm->notification_buffer);
+				acm->nb_size = 0;
+			}
+			alloc_size = roundup_pow_of_two(expected_size);
+			/*
+			 * kmalloc ensures a valid notification_buffer after a
+			 * use of kfree in case the previous allocation was too
+			 * small. Final freeing is done on disconnect.
+			 */
+			acm->notification_buffer =
+				kmalloc(alloc_size, GFP_ATOMIC);
+			if (!acm->notification_buffer)
+				goto exit;
+			acm->nb_size = alloc_size;
+		}
+
+		copy_size = min(current_size,
+				expected_size - acm->nb_index);
+
+		memcpy(&acm->notification_buffer[acm->nb_index],
+		       urb->transfer_buffer, copy_size);
+		acm->nb_index += copy_size;
+		current_size = acm->nb_index;
+	}
+
+	if (current_size >= expected_size) {
+		/* notification complete */
+		acm_process_notification(acm, (unsigned char *)dr);
+		acm->nb_index = 0;
+	}
+
 exit:
 	retval = usb_submit_urb(urb, GFP_ATOMIC);
 	if (retval && retval != -EPERM)
@@ -419,33 +468,61 @@ static void acm_read_bulk_callback(struct urb *urb)
 	struct acm *acm = rb->instance;
 	unsigned long flags;
 	int status = urb->status;
+  bool stopped = false;
+  bool stalled = false;
 
-	dev_vdbg(&acm->data->dev, "%s - urb %d, len %d\n", __func__,
-					rb->index, urb->actual_length);
+	dev_vdbg(&acm->data->dev, "got urb %d, len %d, status %d\n",
+					rb->index, urb->actual_length,
+					status);
 
 	if (!acm->dev) {
-		set_bit(rb->index, &acm->read_urbs_free);
 		dev_dbg(&acm->data->dev, "%s - disconnected\n", __func__);
 		return;
 	}
 
-	if (status) {
-		set_bit(rb->index, &acm->read_urbs_free);
-		dev_dbg(&acm->data->dev, "%s - non-zero urb status: %d\n",
-							__func__, status);
-		if ((status != -ENOENT) || (urb->actual_length == 0))
-			return;
+	switch (status) {
+	case 0:
+		usb_mark_last_busy(acm->dev);
+		acm_process_read_urb(acm, urb);
+		break;
+	case -EPIPE:
+		set_bit(EVENT_RX_STALL, &acm->flags);
+		stalled = true;
+		break;
+	case -ENOENT:
+	case -ECONNRESET:
+	case -ESHUTDOWN:
+		dev_dbg(&acm->data->dev,
+			"%s - urb shutting down with status: %d\n",
+			__func__, status);
+		stopped = true;
+		break;
+	default:
+		dev_dbg(&acm->data->dev,
+			"%s - nonzero urb status received: %d\n",
+			__func__, status);
+		break;
 	}
 
-	usb_mark_last_busy(acm->dev);
-
-	acm_process_read_urb(acm, urb);
 	/*
-	 * Unthrottle may run on another CPU which needs to see events
-	 * in the same order. Submission has an implict barrier
+	 * Make sure URB processing is done before marking as free to avoid
+	 * racing with unthrottle() on another CPU. Matches the barriers
+	 * implied by the test_and_clear_bit() in acm_submit_read_urb().
 	 */
 	smp_mb__before_atomic();
 	set_bit(rb->index, &acm->read_urbs_free);
+	/*
+	 * Make sure URB is marked as free before checking the throttled flag
+	 * to avoid racing with unthrottle() on another CPU. Matches the
+	 * smp_mb() in unthrottle().
+	 */
+	smp_mb__after_atomic();
+
+	if (stopped || stalled) {
+		if (stalled)
+			schedule_work(&acm->work);
+		return;
+	}
 
 	/* throttle device if requested by tty */
 	spin_lock_irqsave(&acm->read_lock, flags);
@@ -467,8 +544,7 @@ static void acm_write_bulk(struct urb *urb)
 	int status = urb->status;
 
 	if (status || (urb->actual_length != urb->transfer_buffer_length))
-		dev_vdbg(&acm->data->dev, "%s - len %d/%d, status %d\n",
-			__func__,
+		dev_vdbg(&acm->data->dev, "wrote len %d/%d, status %d\n",
 			urb->actual_length,
 			urb->transfer_buffer_length,
 			status);
@@ -476,16 +552,28 @@ static void acm_write_bulk(struct urb *urb)
 	spin_lock_irqsave(&acm->write_lock, flags);
 	acm_write_done(acm, wb);
 	spin_unlock_irqrestore(&acm->write_lock, flags);
+	set_bit(EVENT_TTY_WAKEUP, &acm->flags);
 	schedule_work(&acm->work);
 }
 
 static void acm_softint(struct work_struct *work)
 {
+	int i;
 	struct acm *acm = container_of(work, struct acm, work);
 
-	dev_vdbg(&acm->data->dev, "%s\n", __func__);
+	if (test_bit(EVENT_RX_STALL, &acm->flags)) {
+		if (!(usb_autopm_get_interface(acm->data))) {
+			for (i = 0; i < acm->rx_buflimit; i++)
+				usb_kill_urb(acm->read_urbs[i]);
+			usb_clear_halt(acm->dev, acm->in);
+			acm_submit_read_urbs(acm, GFP_KERNEL);
+			usb_autopm_put_interface(acm->data);
+		}
+		clear_bit(EVENT_RX_STALL, &acm->flags);
+	}
 
-	tty_port_tty_wakeup(&acm->port);
+	if (test_and_clear_bit(EVENT_TTY_WAKEUP, &acm->flags))
+		tty_port_tty_wakeup(&acm->port);
 }
 
 /*
@@ -696,7 +784,7 @@ static int acm_tty_write(struct tty_struct *tty,
 	if (!count)
 		return 0;
 
-	dev_vdbg(&acm->data->dev, "%s - count %d\n", __func__, count);
+	dev_vdbg(&acm->data->dev, "%d bytes from tty layer\n", count);
 
 	spin_lock_irqsave(&acm->write_lock, flags);
 	wbn = acm_wb_alloc(acm);
@@ -713,7 +801,7 @@ static int acm_tty_write(struct tty_struct *tty,
 	}
 
 	count = (count > acm->writesize) ? acm->writesize : count;
-	dev_vdbg(&acm->data->dev, "%s - write %d\n", __func__, count);
+	dev_vdbg(&acm->data->dev, "writing %d bytes\n", count);
 	memcpy(wb->buf, buf, count);
 	wb->len = count;
 
@@ -782,6 +870,9 @@ static void acm_tty_unthrottle(struct tty_struct *tty)
 	acm->throttled = 0;
 	acm->throttle_req = 0;
 	spin_unlock_irq(&acm->read_lock);
+
+	/* Matches the smp_mb__after_atomic() in acm_read_bulk_callback(). */
+	smp_mb();
 
 	if (was_throttled)
 		acm_submit_read_urbs(acm, GFP_KERNEL);
@@ -1365,8 +1456,16 @@ made_compressed_probe:
 	spin_lock_init(&acm->read_lock);
 	mutex_init(&acm->mutex);
 	acm->is_int_ep = usb_endpoint_xfer_int(epread);
-	if (acm->is_int_ep)
+	if (acm->is_int_ep) {
 		acm->bInterval = epread->bInterval;
+		acm->in = usb_rcvintpipe(usb_dev, epread->bEndpointAddress);
+	} else {
+		acm->in = usb_rcvbulkpipe(usb_dev, epread->bEndpointAddress);
+	}
+	if (usb_endpoint_xfer_int(epwrite))
+		acm->out = usb_sndintpipe(usb_dev, epwrite->bEndpointAddress);
+	else
+		acm->out = usb_sndbulkpipe(usb_dev, epwrite->bEndpointAddress);
 	tty_port_init(&acm->port);
 	acm->port.ops = &acm_port_ops;
 	init_usb_anchor(&acm->delayed);
@@ -1401,20 +1500,15 @@ made_compressed_probe:
 
 		urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 		urb->transfer_dma = rb->dma;
-		if (acm->is_int_ep) {
-			usb_fill_int_urb(urb, acm->dev,
-					 usb_rcvintpipe(usb_dev, epread->bEndpointAddress),
-					 rb->base,
+		if (acm->is_int_ep)
+			usb_fill_int_urb(urb, acm->dev, acm->in, rb->base,
 					 acm->readsize,
 					 acm_read_bulk_callback, rb,
 					 acm->bInterval);
-		} else {
-			usb_fill_bulk_urb(urb, acm->dev,
-					  usb_rcvbulkpipe(usb_dev, epread->bEndpointAddress),
-					  rb->base,
+		else
+			usb_fill_bulk_urb(urb, acm->dev, acm->in, rb->base,
 					  acm->readsize,
 					  acm_read_bulk_callback, rb);
-		}
 
 		acm->read_urbs[i] = urb;
 		__set_bit(i, &acm->read_urbs_free);
@@ -1427,12 +1521,10 @@ made_compressed_probe:
 			goto alloc_fail7;
 
 		if (usb_endpoint_xfer_int(epwrite))
-			usb_fill_int_urb(snd->urb, usb_dev,
-				usb_sndintpipe(usb_dev, epwrite->bEndpointAddress),
+			usb_fill_int_urb(snd->urb, usb_dev, acm->out,
 				NULL, acm->writesize, acm_write_bulk, snd, epwrite->bInterval);
 		else
-			usb_fill_bulk_urb(snd->urb, usb_dev,
-				usb_sndbulkpipe(usb_dev, epwrite->bEndpointAddress),
+			usb_fill_bulk_urb(snd->urb, usb_dev, acm->out,
 				NULL, acm->writesize, acm_write_bulk, snd);
 		snd->urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 		if (quirks & SEND_ZERO_PACKET)
@@ -1482,6 +1574,9 @@ skip_countries:
 			 epctrl->bInterval ? epctrl->bInterval : 16);
 	acm->ctrlurb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	acm->ctrlurb->transfer_dma = acm->ctrl_dma;
+	acm->notification_buffer = NULL;
+	acm->nb_index = 0;
+	acm->nb_size = 0;
 
 	dev_info(&intf->dev, "ttyACM%d: USB ACM device\n", minor);
 
@@ -1501,8 +1596,8 @@ skip_countries:
 	}
 
 	if (quirks & CLEAR_HALT_CONDITIONS) {
-		usb_clear_halt(usb_dev, usb_rcvbulkpipe(usb_dev, epread->bEndpointAddress));
-		usb_clear_halt(usb_dev, usb_sndbulkpipe(usb_dev, epwrite->bEndpointAddress));
+		usb_clear_halt(usb_dev, acm->in);
+		usb_clear_halt(usb_dev, acm->out);
 	}
 
 	return 0;
@@ -1596,6 +1691,8 @@ static void acm_disconnect(struct usb_interface *intf)
 	usb_free_coherent(usb_dev, acm->ctrlsize, acm->ctrl_buffer, acm->ctrl_dma);
 	acm_read_buffers_free(acm);
 
+	kfree(acm->notification_buffer);
+
 	if (!acm->combined_interfaces)
 		usb_driver_release_interface(&acm_driver, intf == acm->control ?
 					acm->data : acm->control);
@@ -1675,6 +1772,16 @@ static int acm_reset_resume(struct usb_interface *intf)
 }
 
 #endif /* CONFIG_PM */
+
+static int acm_pre_reset(struct usb_interface *intf)
+{
+	struct acm *acm = usb_get_intfdata(intf);
+
+	clear_bit(EVENT_RX_STALL, &acm->flags);
+	acm->nb_index = 0; /* pending control transfers are lost */
+
+	return 0;
+}
 
 #define NOKIA_PCSUITE_ACM_INFO(x) \
 		USB_DEVICE_AND_INTERFACE_INFO(0x0421, x, \
@@ -1946,6 +2053,7 @@ static struct usb_driver acm_driver = {
 	.resume =	acm_resume,
 	.reset_resume =	acm_reset_resume,
 #endif
+	.pre_reset =	acm_pre_reset,
 	.id_table =	acm_ids,
 #ifdef CONFIG_PM
 	.supports_autosuspend = 1,
