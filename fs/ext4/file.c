@@ -97,6 +97,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct blk_plug plug;
 	int o_direct = iocb->ki_flags & IOCB_DIRECT;
 	int overwrite = 0;
+	int range_mapped = 0;
 	ssize_t ret;
 
 	/*
@@ -171,13 +172,17 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			 * these two conditions.
 			 */
 			if (err == len && (map.m_flags & EXT4_MAP_MAPPED)) {
+				range_mapped = 1;
 				if (ext4_should_dioread_nolock(inode))
 					overwrite = 1;
-			} else if (iocb->ki_flags & IOCB_NOWAIT) {
-				ret = -EAGAIN;
-				goto out;
 			}
 		}
+
+		if (!range_mapped && (iocb->ki_flags & IOCB_NOWAIT)) {
+			ret = -EAGAIN;
+			goto out;
+		}
+
 	}
 
 	ret = __generic_file_write_iter(iocb, from);
