@@ -284,6 +284,7 @@ do {								\
 	__chk_user_ptr(ptr);					\
 	if (!is_kernel_addr((unsigned long)__gu_addr))		\
 		might_fault();					\
+	barrier_nospec();					\
 	__get_user_size(__gu_val, __gu_addr, (size), __gu_err);	\
 	(x) = (__force __typeof__(*(ptr)))__gu_val;			\
 	__gu_err;						\
@@ -327,8 +328,10 @@ extern unsigned long __copy_tofrom_user(void __user *to,
 static inline unsigned long copy_from_user(void *to,
 		const void __user *from, unsigned long n)
 {
-	if (likely(access_ok(VERIFY_READ, from, n)))
+	if (likely(access_ok(VERIFY_READ, from, n))) {
+		barrier_nospec();
 		return __copy_tofrom_user((__force void __user *)to, from, n);
+	}
 	memset(to, 0, n);
 	return n;
 }
@@ -410,6 +413,7 @@ static inline unsigned long __copy_to_user_inatomic(void __user *to,
 		if (ret == 0)
 			return 0;
 	}
+
 	return __copy_tofrom_user(to, (__force const void __user *)from, n);
 }
 

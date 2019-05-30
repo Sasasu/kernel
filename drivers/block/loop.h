@@ -56,9 +56,7 @@ struct loop_device {
 
 	spinlock_t		lo_lock;
 	int			lo_state;
-#ifdef __GENKSYMS__
 	struct mutex		lo_ctl_mutex;
-#endif
 	struct kthread_worker	worker;
 	struct task_struct	*worker_task;
 	bool			use_dio;
