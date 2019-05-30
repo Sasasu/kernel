@@ -64,6 +64,10 @@
 #include "libata.h"
 #include "libata-transport.h"
 
+#define LED_OFF         0x0
+#define LED_ON          0x1
+extern void iec_disk_access(int index, int act);
+
 const struct ata_port_operations ata_base_port_ops = {
 	.prereset		= ata_std_prereset,
 	.postreset		= ata_std_postreset,
@@ -4178,6 +4182,8 @@ static void ata_dev_xfermask(struct ata_device *dev)
 			xfer_mask &= ~(0xF8 << ATA_SHIFT_UDMA);
 		}
 
+	iec_disk_access(ap->scsi_host->host_no, LED_OFF);
+
 	ata_unpack_xfermask(xfer_mask, &dev->pio_mask,
 			    &dev->mwdma_mask, &dev->udma_mask);
 }
@@ -4551,6 +4557,8 @@ void ata_qc_free(struct ata_queued_cmd *qc)
 		if (ap->flags & ATA_FLAG_SAS_HOST)
 			ata_sas_free_tag(tag, ap);
 	}
+
+    iec_disk_access(ap->scsi_host->host_no, LED_ON);
 }
 
 void __ata_qc_complete(struct ata_queued_cmd *qc)
