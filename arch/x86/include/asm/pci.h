@@ -159,4 +159,11 @@ struct pci_setup_rom {
 	uint8_t romdata[0];
 };
 
+#define CE3100_SOC_DEVICE_ID 0x2E50
+#define CE4100_SOC_DEVICE_ID 0x0708
+#define CE4200_SOC_DEVICE_ID 0x0709
+#define CE5300_SOC_DEVICE_ID 0x0C40
+#define CE2600_SOC_DEVICE_ID 0x0931
+int intelce_get_soc_info(unsigned int *id, unsigned int *rev);
+
 #endif /* _ASM_X86_PCI_H */
