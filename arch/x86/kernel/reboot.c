@@ -619,6 +619,8 @@ static void native_machine_emergency_restart(void)
 			mach_reboot_fixups(); /* For board specific fixups */
 
 			for (i = 0; i < 10; i++) {
+				outb(0x2, 0xcf9);
+				udelay(50);
 				kb_wait();
 				udelay(50);
 				outb(0xfe, 0x64); /* Pulse reset low */
@@ -739,6 +741,11 @@ static void native_machine_halt(void)
 
 static void native_machine_power_off(void)
 {
+	machine_shutdown();
+	while (1) {
+		outb(0x4, 0xcf9);
+		udelay(50);
+	}
 	if (pm_power_off) {
 		if (!reboot_force)
 			machine_shutdown();
