@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 obj-y				:= i386.o init.o
+obj-y += intel_media_proc_gen3.o
 
 obj-$(CONFIG_PCI_BIOS)		+= pcbios.o
 obj-$(CONFIG_PCI_MMCONFIG)	+= mmconfig_$(BITS).o direct.o mmconfig-shared.o
