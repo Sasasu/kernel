@@ -535,6 +535,8 @@ int pm51_init_procfs(void)
 	if (!pde)
 		return -ENOMEM;
 
+	pm51_write_fan_duty(30);
+
 	return 0;
 }
 
