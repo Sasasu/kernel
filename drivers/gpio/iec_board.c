@@ -308,12 +308,12 @@ static int proc_board_io_open(struct inode *inode, struct file *file)
 	return single_open(file, proc_board_io_show, NULL);
 }
 
-static struct file_operations proc_board_io_operations = {
-	.open = proc_board_io_open,
-	.read = seq_read,
-	.write = proc_board_io_write,
-	.llseek = seq_lseek,
-	.release = single_release,
+static struct proc_ops proc_board_io_proc_ops = {
+	.proc_open = proc_board_io_open,
+	.proc_read = seq_read,
+	.proc_write = proc_board_io_write,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 
 #define MESSAGE_LENGTH 80
@@ -458,8 +458,8 @@ static ssize_t board_event_read(struct file *file, char __user *buffer,
 	return i;
 }
 
-static struct file_operations proc_board_event_operations = {
-	.read = board_event_read,
+static struct proc_ops proc_board_event_proc_ops = {
+	.proc_read = board_event_read,
 };
 
 static void wdt_timeout(struct timer_list *x)
@@ -548,8 +548,8 @@ out2:
 	return err;
 }
 
-static struct file_operations proc_wdtsetting_operations = {
-	.write = proc_wdtsetting_write,
+static struct proc_ops proc_wdtsetting_proc_ops = {
+	.proc_write = proc_wdtsetting_write,
 };
 
 static int sys_notify_reboot(struct notifier_block *nb, unsigned long event,
@@ -623,7 +623,7 @@ static __init int board_io_init(void)
 	for (n = 0; n < 2; n++)
 		qc_cur[n] = LED_OFF;
 	// create BOARD_io and theucs_event proc nodes
-	pde = proc_create("BOARD_io", 0, NULL, &proc_board_io_operations);
+	pde = proc_create("BOARD_io", 0, NULL, &proc_board_io_proc_ops);
 	if (!pde) {
 		printk(KERN_ERR "board_io: cannot create /proc/BOARD_io.\n");
 		ret = -ENOENT;
@@ -631,7 +631,7 @@ static __init int board_io_init(void)
 	}
 
 	pde = proc_create("BOARD_event", S_IRUSR, NULL,
-			  &proc_board_event_operations);
+			  &proc_board_event_proc_ops);
 	if (!pde) {
 		printk(KERN_ERR "board_io: cannot create /proc/BOARD_event.\n");
 		ret = -ENOENT;
@@ -653,7 +653,7 @@ static __init int board_io_init(void)
 		goto wq_out;
 	}
 	pde = proc_create("WdtSetting", S_IRUSR, NULL,
-			  &proc_wdtsetting_operations);
+			  &proc_wdtsetting_proc_ops);
 	if (!pde) {
 		printk(KERN_ERR "board_io: cannot create /proc/WdtSetting.\n");
 		ret = -ENOENT;

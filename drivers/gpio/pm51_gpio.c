@@ -519,19 +519,19 @@ static int fan_io_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, fan_io_proc_show, NULL);
 }
 
-static struct file_operations proc_fan_io_operations = {
-	.open = fan_io_proc_open,
-	.read = seq_read,
-	.write = fan_io_proc_write,
-	.llseek = seq_lseek,
-	.release = single_release,
+static struct proc_ops proc_fan_io_proc_ops = {
+	.proc_open = fan_io_proc_open,
+	.proc_read = seq_read,
+	.proc_write = fan_io_proc_write,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 
 int pm51_init_procfs(void)
 {
 	struct proc_dir_entry *pde;
 
-	pde = proc_create("FAN_io", 0, NULL, &proc_fan_io_operations);
+	pde = proc_create("FAN_io", 0, NULL, &proc_fan_io_proc_ops);
 	if (!pde)
 		return -ENOMEM;
 
