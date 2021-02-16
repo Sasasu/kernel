@@ -632,7 +632,7 @@
 		pinctrl-0 = <&i2c7_xfer>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		status = "disabled";
+		status = "okay";
 	};
 
 	uart0: serial@ff180000 {
@@ -1204,7 +1204,7 @@
 		pinctrl-0 = <&i2c8_xfer>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		status = "disabled";
+		status = "disabled"; // used by pmic
 	};
 
 	pwm0: pwm@ff420000 {
