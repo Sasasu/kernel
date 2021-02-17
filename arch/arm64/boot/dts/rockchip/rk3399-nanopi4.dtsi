@@ -725,19 +725,11 @@
 	status = "okay";
 };
 
-&u2phy0_otg {
-	status = "okay";
-};
-
 &u2phy1 {
 	status = "okay";
 };
 
 &u2phy1_host {
-	status = "okay";
-};
-
-&u2phy1_otg {
 	status = "okay";
 };
 
