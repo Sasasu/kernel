@@ -1152,6 +1152,15 @@ const char *v4l2_ctrl_get_name(u32 id)
 	case V4L2_CID_DV_RX_POWER_PRESENT:	return "Power Present";
 	case V4L2_CID_DV_RX_RGB_RANGE:		return "Rx RGB Quantization Range";
 	case V4L2_CID_DV_RX_IT_CONTENT_TYPE:	return "Rx IT Content Type";
+	case V4L2_CID_DV_HDCP_PRESENT:		return "HDCP Present";
+	case V4L2_CID_DV_HDCP_ENABLE:		return "HDCP Enable";
+	case V4L2_CID_DV_HDCP_REPEATER:		return "HDCP Repeater";
+	case V4L2_CID_DV_HDCP_MAXCASCADE_EXCEEDED:	return "HDCP Max Cascade Exceeded";
+	case V4L2_CID_DV_HDCP_MAXDEVS_EXCEEDED:	return "HDCP Max Devs Exceeded";
+	case V4L2_CID_DV_HDCP_DEPTH:		return "HDCP Depth";
+	case V4L2_CID_DV_HDCP_DEVICE_COUNT:	return "HDCP Device Count";
+	case V4L2_CID_DV_HDCP_REPEATER_READY:	return "HDCP Repeater Ready";
+	case V4L2_CID_DV_HDCP_KSVFIFO:		return "HDCP KSV FIFO";
 
 	case V4L2_CID_FM_RX_CLASS:		return "FM Radio Receiver Controls";
 	case V4L2_CID_TUNE_DEEMPHASIS:		return "De-Emphasis";
@@ -1229,6 +1238,11 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER:
 	case V4L2_CID_WIDE_DYNAMIC_RANGE:
 	case V4L2_CID_IMAGE_STABILIZATION:
+	case V4L2_CID_DV_HDCP_PRESENT:
+	case V4L2_CID_DV_HDCP_ENABLE:
+	case V4L2_CID_DV_HDCP_REPEATER:
+	case V4L2_CID_DV_HDCP_MAXCASCADE_EXCEEDED:
+	case V4L2_CID_DV_HDCP_MAXDEVS_EXCEEDED:
 	case V4L2_CID_RDS_RECEPTION:
 	case V4L2_CID_RF_TUNER_LNA_GAIN_AUTO:
 	case V4L2_CID_RF_TUNER_MIXER_GAIN_AUTO:
@@ -1266,6 +1280,7 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_AUTO_FOCUS_START:
 	case V4L2_CID_AUTO_FOCUS_STOP:
 	case V4L2_CID_DO_WHITE_BALANCE:
+	case V4L2_CID_DV_HDCP_REPEATER_READY:
 		*type = V4L2_CTRL_TYPE_BUTTON;
 		*flags |= V4L2_CTRL_FLAG_WRITE_ONLY |
 			  V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
@@ -1465,6 +1480,11 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		*type = V4L2_CTRL_TYPE_AREA;
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
 		break;
+	case V4L2_CID_DV_HDCP_KSVFIFO:
+		*type = V4L2_CTRL_TYPE_U8;
+		*min = *def = 0;
+		*max = 0xff;
+		break;
 	default:
 		*type = V4L2_CTRL_TYPE_INTEGER;
 		break;
@@ -1525,6 +1545,8 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_DV_TX_EDID_PRESENT:
 	case V4L2_CID_DV_RX_POWER_PRESENT:
 	case V4L2_CID_DV_RX_IT_CONTENT_TYPE:
+	case V4L2_CID_DV_HDCP_PRESENT:
+	case V4L2_CID_DV_HDCP_REPEATER:
 	case V4L2_CID_RDS_RX_PTY:
 	case V4L2_CID_RDS_RX_PS_NAME:
 	case V4L2_CID_RDS_RX_RADIO_TEXT:
@@ -1534,6 +1556,9 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 	case V4L2_CID_CAMERA_ORIENTATION:
 	case V4L2_CID_CAMERA_SENSOR_ROTATION:
 		*flags |= V4L2_CTRL_FLAG_READ_ONLY;
+		break;
+	case V4L2_CID_DV_HDCP_ENABLE:
+		*flags |= V4L2_CTRL_FLAG_EXECUTE_ON_WRITE;
 		break;
 	case V4L2_CID_RF_TUNER_PLL_LOCK:
 		*flags |= V4L2_CTRL_FLAG_VOLATILE;
