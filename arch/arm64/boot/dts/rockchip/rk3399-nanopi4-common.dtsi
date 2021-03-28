@@ -357,7 +357,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 =<&leds_gpio>;
 
-		led@1 {
+		status_led: led@1 {
 			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
 			label = "status_led";
 			linux,default-trigger = "heartbeat";

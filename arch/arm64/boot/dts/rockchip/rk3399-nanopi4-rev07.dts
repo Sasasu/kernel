@@ -134,3 +134,7 @@
 		opp-microvolt = <900000>;
 	};
 };
+
+&status_led {
+	linux,default-trigger = "default-on";
+};
