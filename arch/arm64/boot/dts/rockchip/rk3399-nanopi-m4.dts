@@ -46,6 +46,13 @@
 		regulator-boot-on;
 		vin-supply = <&vcc5v0_sys>;
 	};
+
+	tc358840_clk: tc358840-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <48000000>;
+		clock-output-names = "tc358840-clk";
+	};
 };
 
 &vcc3v3_sys {
@@ -63,4 +70,56 @@
 &vbus_typec {
 	regulator-always-on;
 	vin-supply = <&vdd_5v>;
+};
+
+&status_led {
+	linux,default-trigger = "default-on";
+};
+
+&i2c1 {
+	// MIPI-CSI2 as HDMI IN
+	tc358840xbg@f {
+		compatible = "toshiba,tc358840";
+		reg = <0x0f>;
+		state = "okay";
+
+		// MIPI_CSI0_RST
+		reset-gpios = <&gpio2 RK_PD3 GPIO_ACTIVE_LOW>;
+
+		interrupt-parent = <&gpio1>;
+		interrupts = <RK_PA0 IRQ_TYPE_LEVEL_HIGH>; // jumper
+
+		clocks      = <&tc358840_clk>;
+		clock-names = "refclk";
+		csi_port    = <1>;			// only TX0 enabled
+		ddc5v_delay = <0>;			// disabled
+
+		lineinitcnt    = <0x00000FA0>;
+		lptxtimecnt    = <0x00000004>;
+		tclk_headercnt = <0x00180203>;
+		tclk_trailcnt  = <0x00040005>;
+		ths_headercnt  = <0x000D0004>;
+		twakeup        = <0x00003E80>;
+		tclk_postcnt   = <0x0000000A>;
+		ths_trailcnt   = <0x00080006>;
+		hstxvregcnt    = <0x00000020>;
+		btacnt         = <0x00040003>;
+
+		/* Bps per lane is (refclk_hz / (prd + 1) * (fbd + 1)) / 2^frs */
+		pll_prd = <10>;
+		pll_frs = <1>;
+		pll_fbd = <125>;
+
+		port {
+			tc358840xbg_out: endpoint {
+				// mipi@ff960000 => MIPI_DST (MIPI_TX0)
+				// mipi@ff968000 => MIPI_?   (MIPI_???)
+				// spi0@??? => MIPI_?
+				// spi1@??? => MIPI_?
+				// remote-endpoint = <&spi0>;
+				clock-lanes = <0>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
 };
