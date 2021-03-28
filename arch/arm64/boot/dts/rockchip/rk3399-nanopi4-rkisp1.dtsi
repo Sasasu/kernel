@@ -70,24 +70,41 @@
 		};
 	};
 
-	tc358749x: tc358749x@0f {
-		compatible = "toshiba,tc358749";
+	tc358749x: tc358840xbg@f {
+		compatible = "toshiba,tc358840";
 		reg = <0x0f>;
-		clocks = <&ext_cam_clk>;
-		clock-names = "refclk";
-		power33-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
-		stanby-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
-		reset-gpios = <&gpio2 5 GPIO_ACTIVE_LOW>;
-		int-gpios = <&gpio0 2 GPIO_ACTIVE_HIGH>;
-		interrupt-parent = <&gpio0>;
-		interrupts = <2 IRQ_TYPE_LEVEL_LOW>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&hdmiin_gpios>;
 		status = "disabled";
+
+		reset-gpios = <&gpio2 RK_PD3 GPIO_ACTIVE_LOW>;
+
+		interrupt-parent = <&gpio1>;
+		interrupts = <RK_PA0 IRQ_TYPE_LEVEL_HIGH>;
+
+		refclk_hz   = <48000000>;	// 48Mhz
+		ddc5v_delay = <0>;			// 5v delay = 0ms
+		enable_hdcp = <0>;			// hdcp disabled
+		csi_port    = <1>;			// only TX0 enabled
+
+		lineinitcnt    = <0x00000FA0>;
+		lptxtimecnt    = <0x00000004>;
+		tclk_headercnt = <0x00180203>;
+		tclk_trailcnt  = <0x00040005>;
+		ths_headercnt  = <0x000D0004>;
+		twakeup        = <0x00003E80>;
+		tclk_postcnt   = <0x0000000A>;
+		ths_trailcnt   = <0x00080006>;
+		hstxvregcnt    = <0x00000020>;
+		btacnt         = <0x00040003>;
+
+		/* Bps per lane is (refclk_hz / (prd + 1) * (fbd + 1)) / 2^frs */
+		pll_prd = <10>;
+		pll_frs = <1>;
+		pll_fbd = <125>;
 
 		port {
 			hdmiin_out0: endpoint {
 				remote-endpoint = <&mipi_in_ucam0c>;
+				clock-lanes = <0>;
 				data-lanes = <1 2 3 4>;
 				clock-noncontinuous;
 				link-frequencies = /bits/ 64 <297000000>;
