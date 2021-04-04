@@ -59,6 +59,25 @@ MODULE_PARM_DESC(debug, "debug level (0-3)");
 
 #define I2C_MAX_XFER_SIZE  (EDID_BLOCK_SIZE + 2)
 
+static u8 EDID_1920x1080_60[] = {
+	0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
+	0x52, 0x62, 0x01, 0x88, 0x00, 0x88, 0x88, 0x88,
+	0x1C, 0x15, 0x01, 0x03, 0x80, 0x00, 0x00, 0x78,
+	0x0A, 0x0D, 0xC9, 0xA0, 0x57, 0x47, 0x98, 0x27,
+	0x12, 0x48, 0x4C, 0x00, 0x00, 0x00, 0x01, 0x01,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x3A,
+	0x80, 0x18, 0x71, 0x38, 0x2D, 0x40, 0x58, 0x2C,
+	0x45, 0x00, 0xC4, 0x8E, 0x21, 0x00, 0x00, 0x1E,
+	0x01, 0x1D, 0x00, 0x72, 0x51, 0xD0, 0x1E, 0x20,
+	0x6E, 0x28, 0x55, 0x00, 0xC4, 0x8E, 0x21, 0x00,
+	0x00, 0x1E, 0x00, 0x00, 0x00, 0xFC, 0x00, 0x54,
+	0x37, 0x34, 0x39, 0x2D, 0x66, 0x48, 0x44, 0x37,
+	0x32, 0x30, 0x0A, 0x20, 0x00, 0x00, 0x00, 0xFD,
+	0x00, 0x14, 0x78, 0x01, 0xFF, 0x1D, 0x00, 0x0A,
+	0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x7B,
+};
+
 static const struct v4l2_dv_timings_cap tc358840_timings_cap_1080p60 = {
 	.type = V4L2_DV_BT_656_1120,
 	/* keep this initialization for compatibility with GCC < 4.4.6 */
@@ -143,6 +162,7 @@ static int tc358840_set_test_pattern_timing(struct v4l2_subdev *sd,
 	struct v4l2_dv_timings *timings);
 static int get_test_pattern_timing(struct v4l2_subdev *sd,
 		struct v4l2_dv_timings *timings);
+static int tc358840_s_edid(struct v4l2_subdev *sd, struct v4l2_subdev_edid *edid);
 
 /* --------------- I2C --------------- */
 
@@ -1146,6 +1166,15 @@ static void tc358840_initial_setup(struct v4l2_subdev *sd)
 	tc358840_sleep_mode(sd, false);
 	tc358840_reset(sd, MASK_RESET_ALL);
 
+	// write EDID
+	struct v4l2_subdev_edid edid = {
+		.pad = 0,
+		.start_block = 0,
+		.blocks = 1,
+		.edid = EDID_1920x1080_60,
+	};
+	tc358840_s_edid(sd, &edid);
+
 	tc358840_init_interrupts(sd);
 
 	/* *** Init CSI *** */
@@ -1916,8 +1945,9 @@ static int tc358840_s_edid(struct v4l2_subdev *sd,
 		return 0;
 	}
 
-	for (i = 0; i < edid_len; i += EDID_BLOCK_SIZE)
+	for (i = 0; i < edid_len; i += EDID_BLOCK_SIZE) {
 		i2c_wr(sd, EDID_RAM + i, edid->edid + i, EDID_BLOCK_SIZE);
+	}
 
 	state->edid_blocks_written = edid->blocks;
 
@@ -2744,9 +2774,6 @@ static int tc358840_probe(struct i2c_client *client,
 
 	v4l2_ctrl_handler_setup(sd->ctrl_handler);
 
-	v4l2_info(sd, "%s found @ 7h%02X (%s)\n", client->name,
-		  client->addr, client->adapter->name);
-
 	sd->dev	= &client->dev;
 	sd->internal_ops = &tc358840_subdev_internal_ops;
 	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
@@ -2780,11 +2807,19 @@ static int tc358840_probe(struct i2c_client *client,
 	i2c_wr16(sd, INTMASK, ~irq_mask & 0x0F3F);
 
 	err = v4l2_async_register_subdev(sd);
-	if (err == 0)
-		return 0;
+	if (err < 0) {
+		pr_err("%s: failed to register v4l2 subdev\n", __func__);
+		goto err_hdl;
+	}
 
-	cec_unregister_adapter(state->cec_adap);
+	v4l2_info(sd, "%s found @ 7h%02X (%s)\n", client->name,
+		  client->addr, client->adapter->name);
+
 err_hdl:
+	if (state->cec_adap) {
+		cec_unregister_adapter(state->cec_adap);
+	}
+
 	v4l2_ctrl_handler_free(&state->hdl);
 	return err;
 }
