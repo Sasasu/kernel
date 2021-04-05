@@ -78,6 +78,13 @@ static u8 EDID_1920x1080_60[] = {
 	0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x7B,
 };
 
+static struct v4l2_subdev_edid tc358840_edid = {
+	.pad = 0,
+	.start_block = 0,
+	.blocks = 1,
+	.edid = EDID_1920x1080_60,
+};
+
 static const struct v4l2_dv_timings_cap tc358840_timings_cap_1080p60 = {
 	.type = V4L2_DV_BT_656_1120,
 	/* keep this initialization for compatibility with GCC < 4.4.6 */
@@ -142,6 +149,11 @@ struct tc358840_state {
 	struct v4l2_dv_timings detected_timings;
 	u32 mbus_fmt_code;
 	u32 rgb_quantization_range;
+
+	u32 module_index;
+	const char *module_facing;
+	const char *module_name;
+	const char *len_name;
 };
 
 static inline struct tc358840_state *to_state(struct v4l2_subdev *sd)
@@ -1166,14 +1178,7 @@ static void tc358840_initial_setup(struct v4l2_subdev *sd)
 	tc358840_sleep_mode(sd, false);
 	tc358840_reset(sd, MASK_RESET_ALL);
 
-	// write EDID
-	struct v4l2_subdev_edid edid = {
-		.pad = 0,
-		.start_block = 0,
-		.blocks = 1,
-		.edid = EDID_1920x1080_60,
-	};
-	tc358840_s_edid(sd, &edid);
+	tc358840_s_edid(sd, &tc358840_edid);
 
 	tc358840_init_interrupts(sd);
 
@@ -1957,6 +1962,79 @@ static int tc358840_s_edid(struct v4l2_subdev *sd,
 	return 0;
 }
 
+// RK ioctl
+#include <linux/rk-camera-module.h>
+
+static void tc358840_get_module_inf(struct tc358840_state *tc358840, struct rkmodule_inf *inf)
+{
+	memset(inf, 0, sizeof(*inf));
+	strlcpy(inf->base.sensor, "tc358840", sizeof(inf->base.sensor));
+	strlcpy(inf->base.module, "tc358840",
+		sizeof(inf->base.module));
+	strlcpy(inf->base.lens, "mipi", sizeof(inf->base.lens));
+}
+
+static long tc358840_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg) {
+	struct tc358840_state *tc358840 = to_state(sd);
+	long ret = 0;
+
+	switch (cmd) {
+		case RKMODULE_GET_MODULE_INFO:
+			if (tc358840->module_name)
+				tc358840_get_module_inf(tc358840, (struct rkmodule_inf *)arg);
+			else
+				ret = -ENOIOCTLCMD;
+			break;
+		default:
+			ret = -ENOIOCTLCMD;
+			break;
+	}
+
+	return ret;
+}
+
+#ifdef CONFIG_COMPAT
+static long tc358840_compat_ioctl32(struct v4l2_subdev *sd, unsigned int cmd, unsigned long arg)
+{
+	long ret;
+	struct rkmodule_inf *inf;
+	struct rkmodule_af_cfg *af_cfg;
+	void __user *up = compat_ptr(arg);
+
+	switch (cmd) {
+		case RKMODULE_GET_MODULE_INFO:
+			inf = kzalloc(sizeof(*inf), GFP_KERNEL);
+			if (!inf) {
+				ret = -ENOMEM;
+				return ret;
+			}
+			ret = tc358840_ioctl(sd, cmd, inf);
+			if (!ret)
+				ret = copy_to_user(up, inf, sizeof(*inf));
+			kfree(inf);
+			break;
+		case RKMODULE_AWB_CFG:
+			af_cfg = kzalloc(sizeof(*af_cfg), GFP_KERNEL);
+			if (!af_cfg) {
+				ret = -ENOMEM;
+				return ret;
+			}
+
+			ret = copy_from_user(af_cfg, up, sizeof(*af_cfg));
+			if (!ret)
+				ret = tc358840_ioctl(sd, cmd, af_cfg);
+			kfree(af_cfg);
+		default:
+			ret = -ENOIOCTLCMD;
+			break;
+	}
+
+	return ret;
+}
+#endif
+
+// RK ioctl
+
 static int tc358840_subscribe_event(struct v4l2_subdev *sd, struct v4l2_fh *fh,
 				    struct v4l2_event_subscription *sub)
 {
@@ -2335,9 +2413,6 @@ static int tc358840_enum_mbus_code(struct v4l2_subdev *sd,
 
 static int tc358840_g_volatile_ctrl(struct v4l2_ctrl *ctrl)
 {
-	struct v4l2_subdev *sd =
-		&container_of(ctrl->handler, struct tc358840_state, hdl)->sd;
-
 	return -EINVAL;
 }
 
@@ -2397,6 +2472,10 @@ static struct v4l2_subdev_core_ops tc358840_subdev_core_ops = {
 	.interrupt_service_routine = tc358840_isr,
 	.subscribe_event = tc358840_subscribe_event,
 	.unsubscribe_event = v4l2_event_subdev_unsubscribe,
+	.ioctl = tc358840_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl32 = tc358840_compat_ioctl32,
+#endif
 #ifdef CONFIG_VIDEO_ADV_DEBUG
 	.g_register = tc358840_g_register,
 	.s_register = tc358840_s_register,
@@ -2641,7 +2720,6 @@ static int tc358840_probe(struct i2c_client *client,
 	u16 irq_mask = MASK_HDMI_INT;
 	struct v4l2_dv_timings timings;
 	struct tc358840_state *state;
-	struct v4l2_ctrl *ctrl;
 	struct v4l2_subdev *sd;
 	int err;
 
@@ -2698,6 +2776,30 @@ static int tc358840_probe(struct i2c_client *client,
 	err = tc358840_verify_chipid(sd);
 	if (err)
 		return err;
+
+	err = of_property_read_u32(client->dev.of_node, RKMODULE_CAMERA_MODULE_INDEX,
+			&state->module_index);
+	err |= of_property_read_string(client->dev.of_node, RKMODULE_CAMERA_MODULE_FACING,
+			&state->module_facing);
+	err |= of_property_read_string(client->dev.of_node, RKMODULE_CAMERA_MODULE_NAME,
+			&state->module_name);
+	err |= of_property_read_string(client->dev.of_node, RKMODULE_CAMERA_LENS_NAME,
+			&state->len_name);
+	if (err) {
+		dev_warn(&client->dev, "Rockchip module information is not set");
+	}
+
+	if (state->module_facing && state->module_name) {
+		char facing[2] = {0};
+		if (strcmp(state->module_facing, "back") == 0)
+			facing[0] = 'b';
+		else
+			facing[0] = 'f';
+
+		snprintf(sd->name, sizeof(sd->name), "m%02d_%s_%s %s",
+			 state->module_index, facing,
+			 "tc358840", dev_name(sd->dev));
+	}
 
 #if IS_ENABLED(CONFIG_VIDEO_TC358840_CEC)
 	state->cec_adap = cec_allocate_adapter(&tc358840_cec_adap_ops,

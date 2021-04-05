@@ -101,6 +101,11 @@
 		pll_frs = <1>;
 		pll_fbd = <125>;
 
+		rockchip,camera-module-index = <0>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "tc358840";
+		rockchip,camera-module-lens-name = "tc358840";
+
 		port {
 			hdmiin_out0: endpoint {
 				remote-endpoint = <&mipi_in_ucam0c>;
