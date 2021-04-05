@@ -2882,6 +2882,7 @@ static int tc358840_probe(struct i2c_client *client,
 #if defined(CONFIG_MEDIA_CONTROLLER)
 	state->pad[0].flags = MEDIA_PAD_FL_SOURCE;
 	state->pad[1].flags = MEDIA_PAD_FL_SOURCE;
+	sd->entity.type = MEDIA_ENT_T_V4L2_SUBDEV_SENSOR;
 	sd->entity.ops = &tc358840_media_ops;
 	err = media_entity_init(&sd->entity, 2, state->pad, 0);
 	if (err < 0) {
