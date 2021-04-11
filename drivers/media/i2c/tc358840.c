@@ -59,6 +59,13 @@ MODULE_PARM_DESC(debug, "debug level (0-3)");
 
 #define I2C_MAX_XFER_SIZE  (EDID_BLOCK_SIZE + 2)
 
+#define TC358840_LINK_FREQ_310MHZ	310000000
+#define TC358840_PIXEL_RATE		((TC358840_LINK_FREQ_310MHZ/2)*4) // 4 line
+
+static const s64 link_freq_menu_items[] = {
+	TC358840_LINK_FREQ_310MHZ,
+};
+
 static u8 EDID_1920x1080_60[] = {
 	0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
 	0x52, 0x62, 0x01, 0x88, 0x00, 0x88, 0x88, 0x88,
@@ -597,28 +604,26 @@ static void print_infoframe(struct v4l2_subdev *sd)
 static int tc358840_s_ctrl_detect_tx_5v(struct v4l2_subdev *sd)
 {
 	struct tc358840_state *state = to_state(sd);
+	int tx5v = tx_5v_power_present(sd);
 
-	if (state->test_pattern)
-		return v4l2_ctrl_s_ctrl(state->detect_tx_5v_ctrl, true);
-
-	return v4l2_ctrl_s_ctrl(state->detect_tx_5v_ctrl,
-		tx_5v_power_present(sd));
+	state->detect_tx_5v_ctrl->val = tx5v;
+	return tx5v;
 }
 
 static int tc358840_s_ctrl_audio_sampling_rate(struct v4l2_subdev *sd)
 {
 	struct tc358840_state *state = to_state(sd);
-
-	return v4l2_ctrl_s_ctrl(state->audio_sampling_rate_ctrl,
-			get_audio_sampling_rate(sd));
+	int rate = get_audio_sampling_rate(sd);
+	state->audio_sampling_rate_ctrl->val = rate;
+	return rate;
 }
 
 static int tc358840_s_ctrl_audio_present(struct v4l2_subdev *sd)
 {
 	struct tc358840_state *state = to_state(sd);
-
-	return v4l2_ctrl_s_ctrl(state->audio_present_ctrl,
-			audio_present(sd));
+	int present = audio_present(sd);
+	state->audio_present_ctrl->val = present;
+	return present;
 }
 
 static int tc358840_update_controls(struct v4l2_subdev *sd)
@@ -2815,7 +2820,13 @@ static int tc358840_probe(struct i2c_client *client,
 #endif
 
 	/* Control Handlers */
-	v4l2_ctrl_handler_init(&state->hdl, 7);
+	v4l2_ctrl_handler_init(&state->hdl, 6);
+
+	v4l2_ctrl_new_int_menu(&state->hdl, NULL, V4L2_CID_LINK_FREQ,
+			       0, 0, link_freq_menu_items);
+
+	v4l2_ctrl_new_std(&state->hdl, NULL, V4L2_CID_PIXEL_RATE,
+			  0, TC358840_PIXEL_RATE, 1, TC358840_PIXEL_RATE);
 
 	state->detect_tx_5v_ctrl = v4l2_ctrl_new_std(&state->hdl, NULL,
 			V4L2_CID_DV_RX_POWER_PRESENT, 0, 1, 0, 0);
