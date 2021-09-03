@@ -182,11 +182,11 @@ static int dw_mci_rk3288_execute_tuning(struct dw_mci_slot *slot, u32 opcode)
 			i++;
 		} else {
 			/*
-			 * No need to check too close to an invalid
-			 * one since testing bad phases is slow.  Skip
-			 * 20 degrees.
+			 * skip 5 degree.
+			 * compatible with some bad MMC card.
+			 * eg. 金弓达 32GiB Micro SD / 5.9CNY on taobao.com
 			 */
-			i += DIV_ROUND_UP(20 * priv->num_phases, 360);
+			i += DIV_ROUND_UP(5 * priv->num_phases, 360);
 
 			/* Always test the last one */
 			if (i >= priv->num_phases)
